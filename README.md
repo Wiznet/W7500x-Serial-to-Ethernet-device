@@ -59,9 +59,7 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
 ### Technical Reference
   - Schematic
   - WIZ750SR
-  - 
 ![](http://i.imgur.com/hpLCZaS.png)
-
   - Demension
 
 
