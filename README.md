@@ -63,16 +63,15 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
 
 ## Development
 ### Target Board
-#### WIZ750SR
+#### WIZwiki-W7500ECO
 
-<!-- WIZ750SR Board pic -->
+<!--WIZwiki-W7500ECO Board pic -->
 
 ##### Features
- - MCU: W7500P chip
+ - MCU: W7500 chip
    - ARM Cortex-M0 Core, up to 48MHz, 128kB Flash / 16kB RAM
    - Hardwired TCP/IP Core, 32KB RAM for TCP/IP (Can be extended to system RAM)
    - Peripherals (GPIO, ADC, SWD, Timer/PWM, UART, SPI, I2C and Etc.)
-   - 10/100 Ethernet MAC and PHY
 
 ##### Callout
 <p align="center">
@@ -89,3 +88,13 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
   <img width="60%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?cache=&w=900&h=636&tok=32d657&media=products:wizwiki-w7500eco:wizwiki_w7500_eco_v1.1_dim_01.png" />
 </p>
 
+#### WIZ750SR
+
+<!-- WIZ750SR Board pic -->
+
+##### Features
+ - MCU: W7500P chip
+   - ARM Cortex-M0 Core, up to 48MHz, 128kB Flash / 16kB RAM
+   - Hardwired TCP/IP Core, 32KB RAM for TCP/IP (Can be extended to system RAM)
+   - Peripherals (GPIO, ADC, SWD, Timer/PWM, UART, SPI, I2C and Etc.)
+   - 10/100 Ethernet MAC and PHY
