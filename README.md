@@ -70,7 +70,7 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
   <img width="90%" src="http://wizwiki.net/wiki/lib/exe/detail.php?media=products:wizwiki-w7500eco:wizwiki-w7500eco3dtop.png" />
 </p>
 
-http://i.imgur.com/DLBkhaX.png
+![](http://i.imgur.com/DLBkhaX.png)
 
 ##### Features
  - MCU: W7500 chip
