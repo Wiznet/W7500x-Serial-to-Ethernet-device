@@ -69,7 +69,7 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
 
 
 <p align="center">
-  <img width="70%" src="http://wizwiki.net/wiki/lib/exe/detail.php?id=products%3Awizwiki-w7500eco%3Astart&media=products:wizwiki-w7500eco:wizwiki-w7500eco3dtop.png" />
+  <img width="70%" src="http://wizwiki.net/wiki/lib/exe/detail.php?media=products:wizwiki-w7500eco:wizwiki-w7500eco3dtop.png" />
 </p>
 
 ##### Features
