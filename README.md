@@ -73,3 +73,19 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
    - Hardwired TCP/IP Core, 32KB RAM for TCP/IP (Can be extended to system RAM)
    - Peripherals (GPIO, ADC, SWD, Timer/PWM, UART, SPI, I2C and Etc.)
    - 10/100 Ethernet MAC and PHY
+
+##### Callout
+<p align="center">
+  <img width="70%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?media=products:wizwiki-w7500eco:wizwiki-w7500eco_callout.png" />
+</p>
+
+##### Pinout
+<p align="center">
+  <img width="90%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?media=products:wizwiki-w7500eco:wizwiki-w7500eco_detailpinout.png" />
+</p>
+
+##### Dimension
+<p align="center">
+  <img width="60%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?cache=&w=900&h=636&tok=32d657&media=products:wizwiki-w7500eco:wizwiki_w7500_eco_v1.1_dim_01.png" />
+</p>
+
