@@ -25,9 +25,10 @@ extern "C" {
 
 #include "W7500x.h"
 
-extern uint32_t SystemCoreClock;     /*!< System Clock Frequency (Core Clock)  */
+extern uint32_t SystemCoreClock;         /*!< System Clock Frequency (Core Clock)  */
 extern uint32_t GetSystemClock(void);    /*!< Get System Clock Frequency */
-
+extern uint32_t GetSourceClock(void);    /*!< Get PLL Source Clock Frequency */
+extern uint32_t GetPLLSource(void);      /*!< Get PLL Source Input; Internal or External */
 
 /**
  * Initialize the system
@@ -41,15 +42,29 @@ extern uint32_t GetSystemClock(void);    /*!< Get System Clock Frequency */
 extern void SystemInit (void);
 
 /**
- * Update SystemCoreClock variable
+ * Initialize the system for users custom
  *
  * @param  none
  * @return none
  *
- * @brief  Updates the SystemCoreClock with current core Clock
- *         retrieved from cpu registers.
+ * @brief  Setup the microcontroller system.
+ *         Initialize the System using parameters
  */
-extern void SystemCoreClockUpdate (void);
+extern void SystemInit_User(uint8_t osc_in_sel, uint32_t pll_src_clock, uint32_t system_clock); 
+
+
+/**
+ * Re-Initialize the system clock for users custom
+ *
+ * @param  none
+ * @return none
+ *
+ * @brief  Setup the microcontroller system.
+ *         Re-initialize the System using parameters
+ */
+ extern void SystemCoreClockUpdate_User(uint8_t osc_in_sel, uint32_t pll_src_clock, uint32_t system_clock);
+
+
 
 /*----------------------------------------------------------------------------
   Define clocks

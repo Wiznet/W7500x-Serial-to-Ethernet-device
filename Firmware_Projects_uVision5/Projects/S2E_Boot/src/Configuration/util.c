@@ -126,8 +126,8 @@ uint8_t str_to_hex(uint8_t * str, uint8_t * hex)
 // Does not use
 uint8_t conv_hexstr(uint8_t * hexstr, uint8_t * hexarray)
 {
-	uint8_t i = 0;
-	uint8_t tmp_hexstr[3];
+	//uint8_t i = 0;
+	char tmp_hexstr[3];
 	uint8_t len = strlen((char *)hexstr);
 	
 	if((len & 0x01)  || (len > 16) || (*hexstr == 0)) return 0;

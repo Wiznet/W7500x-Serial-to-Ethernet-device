@@ -8,6 +8,15 @@
 
 typedef enum
 {
+	IO_DIGITAL_INPUT  = 0,
+	IO_DIGITAL_OUTPUT = 1,
+	IO_ANALOG_INPUT   = 2,
+	IO_ANALOG_OUTPUT  = 3,
+	IO_UNKNOWN        = 0xff
+} USER_IO_Define;
+
+typedef enum
+{
 	IO_INPUT  = 0,
 	IO_OUTPUT = 1
 } USER_IO_Direction;
@@ -33,6 +42,8 @@ typedef enum
 extern uint8_t        USER_IO_SEL[];
 extern const char*    USER_IO_STR[];
 extern const char*    USER_IO_PIN_STR[];
+extern const char*    USER_IO_TYPE_STR[];
+extern const char*    USER_IO_DIR_STR[];
 
 void IO_Configuration(void);
 
@@ -61,6 +72,7 @@ void init_flowcontrol_dtr_pin(void);
 void init_flowcontrol_dsr_pin(void);
 
 void set_connection_status_io(uint16_t pin, uint8_t set);
+uint8_t get_connection_status_io(uint16_t pin);
 void set_flowcontrol_dtr_pin(uint8_t set);
 uint8_t get_flowcontrol_dsr_pin(void);
 

@@ -1,6 +1,7 @@
 
 #include <string.h>
 #include "common.h"
+#include "W7500x_board.h"
 #include "flashHandler.h"
 #include "deviceHandler.h"
 #include "storageHandler.h"
@@ -9,30 +10,36 @@
 	#include <stdio.h>
 #endif
 
-#ifdef USE_EXT_EEPROM
+#ifdef __USE_EXT_EEPROM__
 	#include "eepromHandler.h"
+	uint16_t convert_eeprom_addr(uint32_t flash_addr);
 #endif
 
 uint32_t read_storage(teDATASTORAGE stype, uint32_t addr, void *data, uint16_t size)
 {
-	uint32_t address;
 	uint32_t ret_len;
 	
 	switch(stype)
 	{
 		case STORAGE_MAC:
-#ifndef USE_EXT_EEPROM
-			ret_len = read_flash(DEVICE_MAC_ADDR, data, 6); // flash
+#ifndef __USE_EXT_EEPROM__
+			ret_len = read_flash(DEVICE_MAC_ADDR, data, 6); // internal data flash for configuration data (DAT0/1)
 #else
-			ret_len = read_eeprom(DEVICE_MAC_ADDR, data, 6); // external eeprom for configuration data
+			ret_len = read_eeprom(convert_eeprom_addr(DEVICE_MAC_ADDR), data, 6); // external eeprom for configuration data
+	#ifdef _EEPROM_DEBUG_
+			//dump_eeprom_block(convert_eeprom_addr(DEVICE_MAC_ADDR));
+	#endif
 #endif
 			break;
 		
 		case STORAGE_CONFIG:
-#ifndef USE_EXT_EEPROM
-			ret_len = read_flash(DEVICE_CONFIG_ADDR, data, size); // flash
+#ifndef __USE_EXT_EEPROM__
+			ret_len = read_flash(DEVICE_CONFIG_ADDR, data, size); // internal data flash for configuration data (DAT0/1)
 #else
-			ret_len = read_eeprom(DEVICE_CONFIG_ADDR, data, size); // external eeprom for configuration data
+			ret_len = read_eeprom(convert_eeprom_addr(DEVICE_CONFIG_ADDR), data, size); // external eeprom for configuration data
+	#ifdef _EEPROM_DEBUG_
+			//dump_eeprom_block(convert_eeprom_addr(DEVICE_CONFIG_ADDR));
+	#endif
 #endif
 			break;
 		
@@ -58,20 +65,33 @@ uint32_t write_storage(teDATASTORAGE stype, uint32_t addr, void *data, uint16_t 
 	switch(stype)
 	{
 		case STORAGE_MAC:
-#ifndef USE_EXT_EEPROM	// flash
+#ifndef __USE_EXT_EEPROM__
 			erase_storage(STORAGE_MAC);
-			ret_len = write_flash(DEVICE_MAC_ADDR, data, 6);
+			ret_len = write_flash(DEVICE_MAC_ADDR, data, 6); // internal data flash for configuration data (DAT0/1)
 #else
-			ret_len = write_eeprom(DEVICE_MAC_ADDR, data, 6); // eeprom for configuration data
+			//erase_storage(STORAGE_MAC);
+			ret_len = write_eeprom(convert_eeprom_addr(DEVICE_MAC_ADDR), data, 6); // external eeprom for configuration data
+			
+			// MAC address write both EEPROM and Internal DAT flash for device stability
+			erase_storage(STORAGE_MAC);
+			ret_len = write_flash(DEVICE_MAC_ADDR, data, 6); // internal data flash for configuration data (DAT0/1)
+		
+	#ifdef _EEPROM_DEBUG_
+			dump_eeprom_block(convert_eeprom_addr(DEVICE_MAC_ADDR));
+	#endif
 #endif
 			break;
 		
 		case STORAGE_CONFIG:
-#ifndef USE_EXT_EEPROM	// flash
+#ifndef __USE_EXT_EEPROM__	// flash
 			erase_storage(STORAGE_CONFIG);
-			ret_len = write_flash(DEVICE_CONFIG_ADDR, data, size);
+			ret_len = write_flash(DEVICE_CONFIG_ADDR, data, size); // internal data flash for configuration data (DAT0/1)
 #else
-			ret_len = write_eeprom(DEVICE_CONFIG_ADDR, data, size); // eeprom for configuration data
+			//erase_storage(STORAGE_CONFIG);
+			ret_len = write_eeprom(convert_eeprom_addr(DEVICE_CONFIG_ADDR), data, size); // external eeprom for configuration data
+	#ifdef _EEPROM_DEBUG_
+			dump_eeprom_block(convert_eeprom_addr(DEVICE_CONFIG_ADDR));
+	#endif
 #endif
 			break;
 		
@@ -100,18 +120,24 @@ void erase_storage(teDATASTORAGE stype)
 	switch(stype)
 	{
 		case STORAGE_MAC:
-#ifndef USE_EXT_EEPROM	// flash
-			erase_flash_sector(DEVICE_MAC_ADDR);
+#ifndef __USE_EXT_EEPROM__
+			erase_flash_sector(DEVICE_MAC_ADDR); // internal data flash for configuration data (DAT0/1)
 #else
-			erase_eeprom(DEVICE_MAC_ADDR);		// eeprom for configuration data
+			erase_eeprom_block(convert_eeprom_addr(DEVICE_MAC_ADDR)); // external eeprom for configuration data
+	#ifdef _EEPROM_DEBUG_
+			dump_eeprom_block(convert_eeprom_addr(DEVICE_MAC_ADDR));
+	#endif
 #endif
 			break;
 		
 		case STORAGE_CONFIG:
-#ifndef USE_EXT_EEPROM	// flash
-			erase_flash_sector(DEVICE_CONFIG_ADDR);
+#ifndef __USE_EXT_EEPROM__
+			erase_flash_sector(DEVICE_CONFIG_ADDR); // internal data flash for configuration data (DAT0/1)
 #else
-			erase_eeprom(DEVICE_CONFIG_ADDR);		// eeprom for configuration data
+			erase_eeprom_block(convert_eeprom_addr(DEVICE_CONFIG_ADDR)); // external eeprom for configuration data
+	#ifdef _EEPROM_DEBUG_
+			dump_eeprom_block(convert_eeprom_addr(DEVICE_CONFIG_ADDR));
+	#endif
 #endif
 			break;
 		
@@ -169,3 +195,11 @@ void erase_storage(teDATASTORAGE stype)
 #endif
 	}
 }
+
+#ifdef __USE_EXT_EEPROM__
+uint16_t convert_eeprom_addr(uint32_t flash_addr)
+{
+	return (uint16_t)(flash_addr-DAT0_START_ADDR);
+}
+#endif
+

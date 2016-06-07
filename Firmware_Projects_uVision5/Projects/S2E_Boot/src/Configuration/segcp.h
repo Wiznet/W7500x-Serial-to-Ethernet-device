@@ -21,7 +21,6 @@ typedef enum {SEGCP_MC, SEGCP_VR, SEGCP_MN, SEGCP_IM, SEGCP_OP, SEGCP_DD, SEGCP_
               SEGCP_FR, SEGCP_EC, SEGCP_K1, SEGCP_UE, SEGCP_UNKNOWN=255
 } teSEGCPCMDNUM;
 
-
 #define SEGCP_ER_NULL         0
 #define SEGCP_ER_NOTAVAIL     1
 #define SEGCP_ER_NOPARAM      2
@@ -87,8 +86,8 @@ typedef enum {SEGCP_MC, SEGCP_VR, SEGCP_MN, SEGCP_IM, SEGCP_OP, SEGCP_DD, SEGCP_
 //#define SEGCP_NONE      flow_none
 #define SEGCP_XONOFF    flow_xon_xoff
 #define SEGCP_RTSCTS    flow_rts_cts
-#define SEGCP_RS422     flow_rs422
-#define SEGCP_RS485     flow_rs485
+//#define SEGCP_RS422     flow_rs422
+//#define SEGCP_RS485     flow_rs485
 
 
 #define SEGCP_PRIVILEGE_SET   0x80

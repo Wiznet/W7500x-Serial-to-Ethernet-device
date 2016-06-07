@@ -10,14 +10,15 @@
 	#include <stdio.h>
 #endif
 
-const uint16_t USER_IO_PIN[USER_IOn] =    {USER_IO_A_PIN, USER_IO_B_PIN, USER_IO_C_PIN, USER_IO_D_PIN};
-GPIO_TypeDef*  USER_IO_PORT[USER_IOn] =   {USER_IO_A_PORT, USER_IO_B_PORT, USER_IO_C_PORT, USER_IO_D_PORT};
-const uint8_t  USER_IO_ADC_CH[USER_IOn] = {USER_IO_A_ADC_CH, USER_IO_B_ADC_CH, USER_IO_C_ADC_CH, USER_IO_D_ADC_CH};
+const uint16_t USER_IO_PIN[USER_IOn] =     {USER_IO_A_PIN, USER_IO_B_PIN, USER_IO_C_PIN, USER_IO_D_PIN};
+GPIO_TypeDef* USER_IO_PORT[USER_IOn] =     {USER_IO_A_PORT, USER_IO_B_PORT, USER_IO_C_PORT, USER_IO_D_PORT};
+uint8_t     USER_IO_ADC_CH[USER_IOn] =     {USER_IO_A_ADC_CH, USER_IO_B_ADC_CH, USER_IO_C_ADC_CH, USER_IO_D_ADC_CH};
 
 uint8_t        USER_IO_SEL[USER_IOn] =     {USER_IO_A, USER_IO_B, USER_IO_C, USER_IO_D};
-const char*    USER_IO_STR[USER_IOn] =     {"a\0", "b\0", "c\0", "d\0"};
-const char*    USER_IO_PIN_STR[USER_IOn] = {"p30\0", "p29\0", "p28\0", "p27\0",}; 
-
+const char*    USER_IO_STR[USER_IOn] =     {"a", "b", "c", "d"};
+const char*    USER_IO_PIN_STR[USER_IOn] = {"p28\0", "p27\0", "p26\0", "p25\0",}; 
+const char*    USER_IO_TYPE_STR[] =        {"Digital", "Analog"};
+const char*    USER_IO_DIR_STR[] =         {"Input", "Output"};
 
 /**
   * @brief  I/O Intialize Function
@@ -25,7 +26,8 @@ const char*    USER_IO_PIN_STR[USER_IOn] = {"p30\0", "p29\0", "p28\0", "p27\0",}
 void IO_Configuration(void)
 {
 	struct __serial_info *serial = (struct __serial_info *)&(get_DevConfig_pointer()->serial_info);
-	uint16_t val;
+	//uint16_t val;
+	
 	/* GPIOs Initialization */
 	
 	// Status I/O - Shared pin init: Connection status pins or DTR/DSR pins
@@ -42,8 +44,9 @@ void IO_Configuration(void)
 	if(get_user_io_enabled(USER_IO_C)) init_user_io(USER_IO_C);
 	if(get_user_io_enabled(USER_IO_D)) init_user_io(USER_IO_D);
 	
-	/*
+	
 	// ## debugging: io functions test
+	/*
 	get_user_io_val(USER_IO_A, &val);
 	printf("USER_IO_A: [val] %d, [enable] %s, [type] %s, [direction] %s\r\n", val, get_user_io_enabled(USER_IO_A)?"enabled":"disabled", get_user_io_type(USER_IO_A)?"analog":"digital", get_user_io_direction(USER_IO_A)?"output":"input");
 	get_user_io_val(USER_IO_B, &val);
@@ -60,8 +63,9 @@ void init_user_io(uint8_t io_sel)
 {
 	struct __user_io_info *user_io_info = (struct __user_io_info *)&(get_DevConfig_pointer()->user_io_info);
 	uint8_t idx = 0;
-	GPIOMode_TypeDef gpio_mode;
-
+	
+	uint8_t io_status = 0;
+	
 	if((user_io_info->user_io_enable & io_sel) == io_sel)
 	{
 		idx = get_user_io_bitorder(io_sel);
@@ -81,15 +85,19 @@ void init_user_io(uint8_t io_sel)
 			// Digital Input / Output
 			if((user_io_info->user_io_direction & io_sel) == io_sel) // IO_OUTPUT == 1
 			{
-				gpio_mode = GPIO_Mode_OUT;
+				GPIO_Configuration(USER_IO_PORT[idx], USER_IO_PIN[idx], GPIO_Mode_OUT, USER_IO_DEFAULT_PAD_AF);
+				io_status = user_io_info->user_io_status;
+				
+				if(io_status == IO_HIGH)
+					GPIO_SetBits(USER_IO_PORT[idx], USER_IO_PIN[idx]);
+				else
+					GPIO_ResetBits(USER_IO_PORT[idx], USER_IO_PIN[idx]);
 			}
 			else
 			{
-				gpio_mode = GPIO_Mode_IN;
+				GPIO_Configuration(USER_IO_PORT[idx], USER_IO_PIN[idx], GPIO_Mode_IN, USER_IO_DEFAULT_PAD_AF);
+				USER_IO_PORT[idx]->OUTENCLR = USER_IO_PIN[idx];
 			}
-			
-			GPIO_Configuration(USER_IO_PORT[idx], USER_IO_PIN[idx], gpio_mode, USER_IO_DEFAULT_PAD_AF);
-			if(gpio_mode == GPIO_Mode_OUT) GPIO_ResetBits(USER_IO_PORT[idx], USER_IO_PIN[idx]); // Pin init (set to low)
 		}
 	}
 }
@@ -245,7 +253,7 @@ uint8_t get_user_io_val(uint16_t io_sel, uint16_t * val)
 	
 	*val = 0;
 	
-	if((user_io_info->user_io_enable & io_sel) ==io_sel) // Enable
+	if((user_io_info->user_io_enable & io_sel) == io_sel) // Enable
 	{
 		idx = get_user_io_bitorder(io_sel);
 		
@@ -254,14 +262,13 @@ uint8_t get_user_io_val(uint16_t io_sel, uint16_t * val)
 			if(USER_IO_ADC_CH[idx] != USER_IO_NO_ADC)
 			{
 				// Analog Input: value
-				*val = read_ADC(USER_IO_ADC_CH[idx]);
+				*val = read_ADC((ADC_CH)USER_IO_ADC_CH[idx]);
 			}
 			else
 			{
 				// IO value get failed
 				*val = 0;
 			}
-			//printf("===============> Analog input: %d <============\r\n", *val);
 		}
 		else // IO_DIGITAL == 0
 		{
@@ -270,13 +277,11 @@ uint8_t get_user_io_val(uint16_t io_sel, uint16_t * val)
 			{
 				// Digital Output: status
 				status = (uint16_t)GPIO_ReadOutputDataBit(USER_IO_PORT[idx], USER_IO_PIN[idx]);
-				//printf("===============> Digital Output: %d <==============\r\n", status);
 			}
 			else // IO_INPUT == 0
 			{
 				// Digital Input: status
 				status = (uint16_t)GPIO_ReadInputDataBit(USER_IO_PORT[idx], USER_IO_PIN[idx]);
-				//printf("===============> Digital input: %d <==============\r\n", status);
 			}
 			
 			//*val |= (status << i);
@@ -303,8 +308,17 @@ uint8_t set_user_io_val(uint16_t io_sel, uint16_t * val)
 		{
 			idx = get_user_io_bitorder(io_sel);
 			
-			if(*val == 0) GPIO_ResetBits(USER_IO_PORT[idx], USER_IO_PIN[idx]);
-			else if(*val == 1) GPIO_SetBits(USER_IO_PORT[idx], USER_IO_PIN[idx]);
+			if(*val == 0)
+			{
+				user_io_info->user_io_status = IO_LOW;
+				GPIO_ResetBits(USER_IO_PORT[idx], USER_IO_PIN[idx]);
+			}
+			else if(*val == 1)
+			{
+				user_io_info->user_io_status = IO_HIGH;
+				GPIO_SetBits(USER_IO_PORT[idx], USER_IO_PIN[idx]);
+			}
+			
 			ret = 1;
 		}
 	}
@@ -330,7 +344,7 @@ uint8_t get_user_io_bitorder(uint16_t io_sel)
 	return ret;
 }
 
-// 12-bit ADC resolution
+// Read ADC val: 12-bit ADC resolution
 uint16_t read_ADC(ADC_CH ch)
 {
 	ADC_ChannelSelect(ch);				///< Select ADC channel to CH0
@@ -385,6 +399,29 @@ void set_connection_status_io(uint16_t pin, uint8_t set)
 			LED_Off(LED2);
 		}
 	}
+}
+
+uint8_t get_connection_status_io(uint16_t pin)
+{
+	struct __serial_info *serial = (struct __serial_info *)&(get_DevConfig_pointer()->serial_info);
+	uint8_t status;
+	
+	if(pin == STATUS_PHYLINK_PIN)
+	{
+			if(serial->dtr_en == 0)
+				status = GPIO_ReadInputDataBit(STATUS_PHYLINK_PORT, STATUS_PHYLINK_PIN);
+			else
+				status = GPIO_ReadOutputDataBit(DTR_PORT, DTR_PIN);
+	}
+	else if(pin == STATUS_TCPCONNECT_PIN)
+	{
+			if(serial->dsr_en == 0) 
+				status = GPIO_ReadInputDataBit(STATUS_TCPCONNECT_PORT, STATUS_TCPCONNECT_PIN); 
+			else 
+				status = GPIO_ReadInputDataBit(DSR_PORT, DSR_PIN);
+	}
+	
+	return status;
 }
 
 // PHY link status pin
@@ -452,8 +489,10 @@ void check_phylink_status(void)
 	
 	if(prev_link_status != link_status)
 	{
-		if(link_status == 0x00)	set_connection_status_io(STATUS_PHYLINK_PIN, ON); 	// PHY Link up
-		else					set_connection_status_io(STATUS_PHYLINK_PIN, OFF); 	// PHY Link down
+		if(link_status == 0x00)
+			set_connection_status_io(STATUS_PHYLINK_PIN, ON); 	// PHY Link up
+		else
+			set_connection_status_io(STATUS_PHYLINK_PIN, OFF); 	// PHY Link down
 		
 		prev_link_status = link_status;
 	}

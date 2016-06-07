@@ -32,7 +32,7 @@ void set_DevConfig_to_factory_value(void)
 	dev_config.module_type[1] = 0x01;
 	dev_config.module_type[2] = 0x00;
 	
-	memset(dev_config.module_name, 0x00, 25);
+	memset(dev_config.module_name, 0x00, 15);
 	memcpy(dev_config.module_name, DEVICE_ID_DEFAULT, sizeof(DEVICE_ID_DEFAULT));
 
 	dev_config.fw_ver[0] = MAJOR_VER;
@@ -76,6 +76,7 @@ void set_DevConfig_to_factory_value(void)
 	dev_config.network_info[0].keepalive_retry_time = 5000;
 
 	// Default Settings for Data UART: 115200-8-N-1, No flowctrl
+	dev_config.serial_info[0].uart_interface = UART_IF_RS232_TTL;
 	dev_config.serial_info[0].baud_rate = baud_115200;
 	dev_config.serial_info[0].data_bits = word_len8;
 	dev_config.serial_info[0].parity = parity_none;
@@ -88,10 +89,9 @@ void set_DevConfig_to_factory_value(void)
 	//dev_config.serial_info[0].serial_debug_en = SEGCP_DISABLE;
 	dev_config.serial_info[0].serial_debug_en = SEGCP_ENABLE;
 	
-	memset(dev_config.options.pw_setting, 0x00, sizeof(dev_config.options.pw_setting));		// Added for WIZ107SR compatibility;
+	//memset(dev_config.options.pw_setting, 0x00, sizeof(dev_config.options.pw_setting));		// Added for WIZ107SR compatibility;
 	memset(dev_config.options.pw_search, 0x00, sizeof(dev_config.options.pw_search));		// Added for WIZ107SR compatibility;
 	memset(dev_config.options.pw_connect, 0x00, sizeof(dev_config.options.pw_connect));
-	//memcpy(dev_config.options.pw_connect, "hello", 5);
 	dev_config.options.pw_connect_en = SEGCP_DISABLE;
 	
 	dev_config.options.dhcp_use = SEGCP_DISABLE;
@@ -110,10 +110,10 @@ void set_DevConfig_to_factory_value(void)
 	dev_config.options.serial_trigger[1] = 0x2b;
 	dev_config.options.serial_trigger[2] = 0x2b;
 	
-	dev_config.user_io_info.user_io_enable = USER_IO_A | USER_IO_B | USER_IO_C | USER_IO_D; // [Enabled] / Disabled
-	//dev_config.user_io_info.user_io_type = ~(USER_IO_A | USER_IO_B | USER_IO_C | USER_IO_D); // [Digital] / Analog
-	dev_config.user_io_info.user_io_type = USER_IO_A | USER_IO_B; // Digital: USER_IO_C, USER_IO_D / Analog: USER_IO_A, USER_IO_B
-	dev_config.user_io_info.user_io_direction = ~(USER_IO_A | USER_IO_B | USER_IO_C | USER_IO_D); // [Input] / Output
+	dev_config.user_io_info.user_io_enable = USER_IO_A | USER_IO_B | USER_IO_C | USER_IO_D; // [Enabled] / Disabled	
+	dev_config.user_io_info.user_io_type = USER_IO_A; // Analog: USER_IO_A, / Digital: USER_IO_B, USER_IO_C, USER_IO_D
+	dev_config.user_io_info.user_io_direction = USER_IO_C | USER_IO_D; // IN / IN / OUT / OUT
+	dev_config.user_io_info.user_io_status = 0;
 	
 	dev_config.firmware_update.fwup_flag = SEGCP_DISABLE;
 	dev_config.firmware_update.fwup_port = DEVICE_FWUP_PORT;
@@ -124,14 +124,16 @@ void set_DevConfig_to_factory_value(void)
 	dev_config.firmware_update_extend.fwup_server_use_default = SEGCP_ENABLE;
 	
 	// Planned to apply
-	//memset(dev_config.firmware_update_extend.fwup_server_domain, 0x00, sizeof(dev_config.firmware_update_extend.fwup_server_domain));
-	//memcpy(dev_config.firmware_update_extend.fwup_server_domain, FWUP_SERVER_DOMAIN, sizeof(FWUP_SERVER_DOMAIN));
-	//memset(dev_config.firmware_update_extend.fwup_server_binpath, 0x00, sizeof(dev_config.firmware_update_extend.fwup_server_binpath));
-	//memcpy(dev_config.firmware_update_extend.fwup_server_binpath, FWUP_SERVER_BINPATH, sizeof(FWUP_SERVER_BINPATH));
+	memset(dev_config.firmware_update_extend.fwup_server_domain, 0x00, sizeof(dev_config.firmware_update_extend.fwup_server_domain));
+	memcpy(dev_config.firmware_update_extend.fwup_server_domain, FWUP_SERVER_DOMAIN, sizeof(FWUP_SERVER_DOMAIN));
+	memset(dev_config.firmware_update_extend.fwup_server_binpath, 0x00, sizeof(dev_config.firmware_update_extend.fwup_server_binpath));
+	memcpy(dev_config.firmware_update_extend.fwup_server_binpath, FWUP_SERVER_BINPATH, sizeof(FWUP_SERVER_BINPATH));
 }
 
 void load_DevConfig_from_storage(void)
 {
+	init_uart_if_sel_pin();
+	
 	read_storage(STORAGE_CONFIG, 0, &dev_config, sizeof(DevConfig));
 
 	if(dev_config.packet_size == 0x0000 || dev_config.packet_size == 0xFFFF){
@@ -144,6 +146,8 @@ void load_DevConfig_from_storage(void)
 	dev_config.fw_ver[0] = MAJOR_VER;
 	dev_config.fw_ver[1] = MINOR_VER;
 	dev_config.fw_ver[2] = MAINTENANCE_VER;
+	
+	dev_config.serial_info[0].uart_interface = get_uart_if_sel_pin();
 }
 
 void save_DevConfig_to_storage(void)
@@ -194,9 +198,9 @@ void display_Net_Info(void)
 
 	ctlnetwork(CN_GET_NETINFO, (void*) &gWIZNETINFO);
 	printf(" # MAC: %02X:%02X:%02X:%02X:%02X:%02X\r\n", gWIZNETINFO.mac[0], gWIZNETINFO.mac[1], gWIZNETINFO.mac[2], gWIZNETINFO.mac[3], gWIZNETINFO.mac[4], gWIZNETINFO.mac[5]);
-	printf(" # IP: %d.%d.%d.%d / Port: %d\r\n", gWIZNETINFO.ip[0], gWIZNETINFO.ip[1], gWIZNETINFO.ip[2], gWIZNETINFO.ip[3], value->network_info[0].local_port);
-	printf(" # GW: %d.%d.%d.%d\r\n", gWIZNETINFO.gw[0], gWIZNETINFO.gw[1], gWIZNETINFO.gw[2], gWIZNETINFO.gw[3]);
-	printf(" # SN: %d.%d.%d.%d\r\n", gWIZNETINFO.sn[0], gWIZNETINFO.sn[1], gWIZNETINFO.sn[2], gWIZNETINFO.sn[3]);
+	printf(" # IP : %d.%d.%d.%d / Port: %d\r\n", gWIZNETINFO.ip[0], gWIZNETINFO.ip[1], gWIZNETINFO.ip[2], gWIZNETINFO.ip[3], value->network_info[0].local_port);
+	printf(" # GW : %d.%d.%d.%d\r\n", gWIZNETINFO.gw[0], gWIZNETINFO.gw[1], gWIZNETINFO.gw[2], gWIZNETINFO.gw[3]);
+	printf(" # SN : %d.%d.%d.%d\r\n", gWIZNETINFO.sn[0], gWIZNETINFO.sn[1], gWIZNETINFO.sn[2], gWIZNETINFO.sn[3]);
 	printf(" # DNS: %d.%d.%d.%d\r\n", gWIZNETINFO.dns[0], gWIZNETINFO.dns[1], gWIZNETINFO.dns[2], gWIZNETINFO.dns[3]);
 	
 	if(value->network_info[0].working_mode != TCP_SERVER_MODE)
@@ -209,6 +213,17 @@ void display_Net_Info(void)
 		{
 			printf(" # Destination IP: %d.%d.%d.%d / Port: %d\r\n", value->network_info[0].remote_ip[0], value->network_info[0].remote_ip[1], 
 															value->network_info[0].remote_ip[2], value->network_info[0].remote_ip[3], value->network_info[0].remote_port);
+			if(value->network_info[0].working_mode == UDP_MODE)
+			{
+				if((value->network_info[0].remote_ip[0] == 0) && (value->network_info[0].remote_ip[1] == 0) && (value->network_info[0].remote_ip[2] == 0) && (value->network_info[0].remote_ip[3] == 0))
+				{
+					printf(" ## UDP 1:N Mode\r\n");
+				}
+				else
+				{
+					printf(" ## UDP 1:1 Mode\r\n");
+				}
+			}
 		}
 	}
 	printf("\r\n");

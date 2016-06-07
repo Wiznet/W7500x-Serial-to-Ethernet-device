@@ -2,14 +2,15 @@
   ******************************************************************************
   * @file    W7500x Serial to Ethernet Project - WIZ750SR Boot
   * @author  Eric Jung, Team Wiki
-  * @version V0.8.0
+  * @version v1.0.0
   * @date    Mar-2016
   * @brief   Boot program body
   ******************************************************************************
   * @attention
   * @par Revision history
-  *    <2015/11/24> v0.0.1 Develop by Eric Jung
+  *    <2016/03/29> v1.0.0 Develop by Eric Jung
   *    <2016/03/02> v0.8.0 Develop by Eric Jung
+  *    <2015/11/24> v0.0.1 Develop by Eric Jung
   *
   * THE PRESENT FIRMWARE WHICH IS FOR GUIDANCE ONLY AIMS AT PROVIDING CUSTOMERS
   * WITH CODING INFORMATION REGARDING THEIR PRODUCTS IN ORDER FOR THEM TO SAVE
@@ -37,13 +38,14 @@
 #include "dhcp.h"
 #include "dhcp_cb.h"
 
-#include "segcp.h"
-#include "configData.h"
-
 #include "timerHandler.h"
 #include "uartHandler.h"
 #include "flashHandler.h"
 #include "deviceHandler.h"
+#include "eepromHandler.h"
+
+#include "segcp.h"
+#include "configData.h"
 
 
 /* Private typedef -----------------------------------------------------------*/
@@ -77,6 +79,7 @@ void Backup_Boot_Interrupt_VectorTable(void);
 // Delay
 void delay(__IO uint32_t milliseconds); //Notice: used ioLibray
 void TimingDelay_Decrement(void);
+void delay_ms(uint32_t ms); // loop delay
 
 /* Private variables ---------------------------------------------------------*/
 static __IO uint32_t TimingDelay;
@@ -100,6 +103,7 @@ int main(void)
 	uint8_t appjump_enable = OFF;
 	uint8_t ret = 0;
 	//uint16_t i;
+	//uint8_t buff[512] = {0x00, };
 	
 	////////////////////////////////////////////////////////////////////////////////////////////////////
 	// W7500x Hardware Initialize
@@ -124,7 +128,6 @@ int main(void)
 	/* Set the device working mode: BOOT */
 	dev_config->network_info[0].state = ST_BOOT;
 	
-	
 	////////////////////////////////////////////////////////////////////////////////////////////////////
 	// W7500x Application: Check the MAC address and Firmware update
 	////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -138,11 +141,14 @@ int main(void)
 	if(dev_config->firmware_update.fwup_flag == 1)
 	{
 		// Firmware download has already been done at application routine.
-		ret = device_firmware_update(STORAGE_APP_MAIN); // Firmware copy: [App backup] -> [App main]
+			// 1. 50kB app mode: Firmware copy: [App backup] -> [App main]
+			// 2. 100kB app mode: Firmware download and write: [Network] -> [App main]
+		ret = device_firmware_update(STORAGE_APP_MAIN);
 		if(ret == DEVICE_FWUP_RET_SUCCESS)
 		{
 			dev_config->firmware_update.fwup_flag = SEGCP_DISABLE;
 			dev_config->firmware_update.fwup_size = 0;
+			
 			save_DevConfig_to_storage();
 			
 			appjump_enable = ON;
@@ -183,6 +189,10 @@ int main(void)
 		appjump_enable = ON;
 	}
 //#endif
+	
+#ifdef __USE_BOOT_ENTRY__
+	if(get_boot_entry_pin() == 0) appjump_enable = OFF;
+#endif
 	
 	if(appjump_enable == ON)
 	{
@@ -282,15 +292,15 @@ static void W7500x_Init(void)
 	// W7500x MCU Initialize
 	////////////////////////////////////////////////////
 	
-	/* External Clock */
-	CRG_PLL_InputFrequencySelect(CRG_OCLK);
+	/* Reset supervisory IC Init */
+	Supervisory_IC_Init();
 	
-	/* Set system clock setting: 48MHz */
-	*(volatile uint32_t *)(0x41001014) = 0x0060100; //clock setting 48MHz
-	//*(volatile uint32_t *)(0x41001014) = 0x000C0200; // 48MHz
+	/* Set System init */
+	SystemInit_User(CLOCK_SOURCE_INTERNAL, PLL_SOURCE_8MHz, SYSTEM_CLOCK_8MHz);
+	//SystemInit();
 	
-	/* Set Systme init */
-	SystemInit();
+	/* Delay for working stabilize */
+	delay_ms(1500); // 
 	
 	////////////////////////////////////////////////////////////////////////////////////////////////////
 	// W7500x ISR: Interrupt Vector Table Remap (Custom)
@@ -309,13 +319,17 @@ static void W7500x_Init(void)
 	Timer_Configuration();
 	
 	/* UART Initialization */
+	//CRG_FCLK_SourceSelect(CRG_RCLK);
 	UART2_Configuration(); // Simple UART (UART2) for Debugging
 	
 	/* SysTick_Config */
 	SysTick_Config((GetSystemClock()/1000));
 	
 #ifdef _MAIN_DEBUG_
-	printf(" GetSystemClock : %d (Hz) \r\n", GetSystemClock());  
+	printf("\r\n >> W7500x MCU Clock Settings ===============\r\n"); 
+	printf(" - GetPLLSource: %s, %lu (Hz)\r\n", GetPLLSource()?"External":"Internal", PLL_SOURCE_8MHz);
+	printf(" - SetSystemClock: %lu (Hz) \r\n", SYSTEM_CLOCK_8MHz);
+	printf(" - GetSystemClock: %d (Hz) \r\n", GetSystemClock());
 #endif
 }
 
@@ -404,12 +418,19 @@ void display_Dev_Info_header(void)
 
 	printf("\r\n");
 	printf("%s\r\n", STR_BAR);
-#ifndef __W7500P__
-	printf(" [W7500] Serial to Ethernet Device\r\n");
+
+#if (DEVICE_BOARD_NAME == WIZ750SR)
+	printf(" WIZ750SR \r\n");
+	printf(" >> WIZnet Serial to Ethernet Device\r\n");
 #else
-	printf(" [W7500P] Serial to Ethernet Device\r\n");
+	#ifndef __W7500P__
+		printf(" [W7500] Serial to Ethernet Device\r\n");
+	#else
+		printf(" [W7500P] Serial to Ethernet Device\r\n");
+	#endif
 #endif
-	printf(" Firmware version: Boot %x.%x.%x %s\r\n", dev_config->fw_ver[0], dev_config->fw_ver[1], dev_config->fw_ver[2], STR_VERSION_STATUS);
+	
+	printf(" >> Firmware version: Boot %d.%d.%d %s\r\n", dev_config->fw_ver[0], dev_config->fw_ver[1], dev_config->fw_ver[2], STR_VERSION_STATUS);
 	printf("%s\r\n", STR_BAR);
 }
 
@@ -560,3 +581,15 @@ void TimingDelay_Decrement(void)
 	}
 }
 
+/**
+  * @brief  Inserts a delay time when the situation cannot use the timer interrupt.
+  * @param  ms: specifies the delay time length, in milliseconds.
+  * @retval None
+  */
+void delay_ms(uint32_t ms)
+{
+	volatile uint32_t nCount;
+	
+	nCount=(GetSystemClock()/10000)*ms;
+	for (; nCount!=0; nCount--);
+}

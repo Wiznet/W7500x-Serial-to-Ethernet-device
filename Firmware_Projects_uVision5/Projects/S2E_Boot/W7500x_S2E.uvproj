@@ -77,7 +77,7 @@
             <RunUserProg1>1</RunUserProg1>
             <RunUserProg2>1</RunUserProg2>
             <UserProg1Name>fromelf --bin -o "$L@L.bin" "#L"</UserProg1Name>
-            <UserProg2Name>w7500_s2e_movebin.bat</UserProg2Name>
+            <UserProg2Name>w7500_s2e_boot_gen_production_hex2bin.bat</UserProg2Name>
             <UserProg1Dos16Mode>0</UserProg1Dos16Mode>
             <UserProg2Dos16Mode>0</UserProg2Dos16Mode>
           </AfterMake>
@@ -435,11 +435,6 @@
               <FilePath>..\..\Libraries\W7500x_stdPeriph_Driver\src\W7500x_gpio.c</FilePath>
             </File>
             <File>
-              <FileName>W7500x_i2c.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\Libraries\W7500x_stdPeriph_Driver\src\W7500x_i2c.c</FilePath>
-            </File>
-            <File>
               <FileName>W7500x_uart.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\Libraries\W7500x_stdPeriph_Driver\src\W7500x_uart.c</FilePath>
@@ -553,6 +548,16 @@
               <FileName>deviceHandler.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\src\PlatformHandler\deviceHandler.c</FilePath>
+            </File>
+            <File>
+              <FileName>eepromHandler.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\src\PlatformHandler\eepromHandler.c</FilePath>
+            </File>
+            <File>
+              <FileName>i2cHandler.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\src\PlatformHandler\i2cHandler.c</FilePath>
             </File>
           </Files>
         </Group>

@@ -685,7 +685,7 @@ uint8_t DHCP_run(void)
 	if(dhcp_state == STATE_DHCP_STOP) return DHCP_STOPPED;
 
 	if(getSn_SR(DHCP_SOCKET) != SOCK_UDP)
-	   socket(DHCP_SOCKET, Sn_MR_UDP, DHCP_CLIENT_PORT, 0x00);
+		socket(DHCP_SOCKET, Sn_MR_UDP, DHCP_CLIENT_PORT, 0x00);
 
 	ret = DHCP_RUNNING;
 	type = parseDHCPMSG();
@@ -920,7 +920,14 @@ void DHCP_init(uint8_t s, uint8_t * buf)
 	pDHCPMSG = (RIP_MSG*)buf;
 	
 	DHCP_XID = 0x12345678;
-	DHCP_XID += (DHCP_CHADDR[3] + DHCP_CHADDR[4] + DHCP_CHADDR[5]);
+	// ## 20160428 Added by Eric, Each of the devices have to has a different XID.
+	//DHCP_XID += (DHCP_CHADDR[3] + DHCP_CHADDR[4] + DHCP_CHADDR[5]);
+	{
+		DHCP_XID += DHCP_CHADDR[3];
+		DHCP_XID += DHCP_CHADDR[4];
+		DHCP_XID += DHCP_CHADDR[5];
+		DHCP_XID += (DHCP_CHADDR[3] ^ DHCP_CHADDR[4] ^ DHCP_CHADDR[5]);
+	}
 	
 	// WIZchip Netinfo Clear
 	setSIPR(zeroip);

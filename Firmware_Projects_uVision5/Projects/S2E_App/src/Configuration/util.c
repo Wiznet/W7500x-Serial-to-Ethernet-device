@@ -206,7 +206,7 @@ hex_decode(const char *in, size_t len,uint8_t *out)
 uint8_t conv_hexstr(uint8_t * hexstr, uint8_t * hexarray)
 {
 	//uint8_t i = 0;
-	uint8_t tmp_hexstr[3];
+	char tmp_hexstr[3];
 	uint8_t len = strlen((char *)hexstr);
 	
 	if((len & 0x01)  || (len > 16) || (*hexstr == 0)) return 0;

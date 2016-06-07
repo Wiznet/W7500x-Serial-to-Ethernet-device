@@ -2,14 +2,15 @@
   ******************************************************************************
   * @file    W7500x Serial to Ethernet Project - WIZ750SR App
   * @author  Eric Jung, Team Wiki
-  * @version V0.8.0
+  * @version v1.0.0
   * @date    Mar-2016
   * @brief   Main program body
   ******************************************************************************
   * @attention
   * @par Revision history
-  *    <2015/11/24> v0.0.1 Develop by Eric Jung
+  *    <2016/03/29> v1.0.0 Develop by Eric Jung
   *    <2016/03/02> v0.8.0 Develop by Eric Jung
+  *    <2015/11/24> v0.0.1 Develop by Eric Jung
   *
   * THE PRESENT FIRMWARE WHICH IS FOR GUIDANCE ONLY AIMS AT PROVIDING CUSTOMERS
   * WITH CODING INFORMATION REGARDING THEIR PRODUCTS IN ORDER FOR THEM TO SAVE
@@ -24,14 +25,14 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include <stdio.h>
+#include "common.h"
+#include "W7500x_board.h"
+
 #include "W7500x_gpio.h"
 #include "W7500x_uart.h"
 #include "W7500x_crg.h"
 #include "W7500x_wztoe.h"
 #include "W7500x_miim.h"
-
-#include "common.h"
-#include "W7500x_board.h"
 
 #include "dhcp.h"
 #include "dhcp_cb.h"
@@ -42,10 +43,14 @@
 #include "configData.h"
 
 #include "timerHandler.h"
+#include "uartHandler.h"
 #include "deviceHandler.h"
 #include "flashHandler.h"
-#include "uartHandler.h"
 #include "gpioHandler.h"
+
+// ## for debugging
+//#include "loopback.h"
+
 
 /* Private typedef -----------------------------------------------------------*/
 
@@ -171,7 +176,7 @@ int main(void)
 	////////////////////////////////////////////////////////////////////////////////////////////////////
 	// W7500x Application: Main Routine
 	////////////////////////////////////////////////////////////////////////////////////////////////////
-
+	
 	flag_s2e_application_running = ON;
 	
 	// HW_TRIG switch ON
@@ -187,6 +192,9 @@ int main(void)
 		do_seg(SOCK_DATA);
 		
 		if(dev_config->options.dhcp_use) DHCP_run(); // DHCP client handler for IP renewal
+		
+		// ## debugging: Data echoback
+		//loopback_tcps(6, g_recv_buf, 5001);
 		
 		// ## debugging: PHY link
 		if(flag_check_phylink)
@@ -212,16 +220,13 @@ static void W7500x_Init(void)
 	////////////////////////////////////////////////////
 	// W7500x MCU Initialize
 	////////////////////////////////////////////////////
+
+	/* Reset supervisory IC Init */
+	Supervisory_IC_Init();
 	
-	/* External Clock */
-	CRG_PLL_InputFrequencySelect(CRG_OCLK);
-	
-	/* Set system clock setting: 48MHz */
-	*(volatile uint32_t *)(0x41001014) = 0x0060100; //clock setting 48MHz
-	
-	/* Set Systme init */
-	SystemInit();
-	
+	/* Set System init */
+	SystemInit_User(DEVICE_CLOCK_SELECT, DEVICE_PLL_SOURCE_CLOCK, DEVICE_TARGET_SYSTEM_CLOCK);
+
 	/* DualTimer Initialization */
 	Timer_Configuration();
 	
@@ -231,8 +236,13 @@ static void W7500x_Init(void)
 	/* SysTick_Config */
 	SysTick_Config((GetSystemClock()/1000));
 	
+
 #ifdef _MAIN_DEBUG_
-	printf("\r\n GetSystemClock : %d (Hz) \r\n", GetSystemClock());  
+	printf("\r\n >> W7500x MCU Clock Settings ===============\r\n"); 
+	printf(" - GetPLLSource: %s, %lu (Hz)\r\n", GetPLLSource()?"External":"Internal", DEVICE_PLL_SOURCE_CLOCK);
+	printf("\t+ CRG->PLL_FCR: 0x%.8x\r\n", CRG->PLL_FCR);
+	printf(" - SetSystemClock: %lu (Hz) \r\n", DEVICE_TARGET_SYSTEM_CLOCK);
+	printf(" - GetSystemClock: %d (Hz) \r\n", GetSystemClock());
 #endif
 }
 
@@ -256,8 +266,11 @@ static void W7500x_WZTOE_Init(void)
 	/* Set WZ_100US Register */
 	setTIC100US((GetSystemClock()/10000));
 #ifdef _MAIN_DEBUG_
-	printf(" GetSystemClock: %X, getTIC100US: %X, (%X) \r\n", GetSystemClock(), getTIC100US(), *(uint32_t *)WZTOE_TIC100US); // for debugging
+	//printf(" GetSystemClock: %X, getTIC100US: %X, (%X) \r\n", GetSystemClock(), getTIC100US(), *(uint32_t *)WZTOE_TIC100US); // for debugging
+	printf("\r\n >> WZTOE Settings ==========================\r\n");
+	printf(" - getTIC100US: %X, (%X) \r\n", getTIC100US(), *(uint32_t *)WZTOE_TIC100US); // for debugging
 #endif
+	
 	/* Set TCP Timeout: retry count / timeout val */
 	// Retry count default: [8], Timeout val default: [2000]
 	net_timeout->retry_cnt = 8;
@@ -266,18 +279,18 @@ static void W7500x_WZTOE_Init(void)
 	
 #ifdef _MAIN_DEBUG_
 	wizchip_gettimeout(net_timeout); // TCP timeout settings
-	printf(" Network Timeout Settings - RCR: %d, RTR: %dms\r\n", net_timeout->retry_cnt, net_timeout->time_100us);
+	printf(" - Network Timeout Settings - RCR: %d, RTR: %dms\r\n", net_timeout->retry_cnt, net_timeout->time_100us);
 #endif
 	
 	/* Set Network Configuration */
 	wizchip_init(tx_size, rx_size);
 	
 #ifdef _MAIN_DEBUG_
-	printf(" WZTOE H/W Socket Buffer Settings (kB)\r\n");
-	printf(" [Tx] ");
+	printf(" - WZTOE H/W Socket Buffer Settings (kB)\r\n");
+	printf("   [Tx] ");
 	for(i = 0; i < _WIZCHIP_SOCK_NUM_; i++) printf("%d ", getSn_TXBUF_SIZE(i));
 	printf("\r\n");
-	printf(" [Rx] ");
+	printf("   [Rx] ");
 	for(i = 0; i < _WIZCHIP_SOCK_NUM_; i++) printf("%d ", getSn_RXBUF_SIZE(i));
 	printf("\r\n");
 #endif
@@ -392,59 +405,101 @@ void display_Dev_Info_header(void)
 
 	printf("\r\n");
 	printf("%s\r\n", STR_BAR);
-#ifndef __W7500P__
-	printf(" [W7500] Serial to Ethernet Device\r\n");
+
+#if (DEVICE_BOARD_NAME == WIZ750SR)
+	printf(" WIZ750SR \r\n");
+	printf(" >> WIZnet Serial to Ethernet Device\r\n");
 #else
-	printf(" [W7500P] Serial to Ethernet Device\r\n");
+	#ifndef __W7500P__
+		printf(" [W7500] Serial to Ethernet Device\r\n");
+	#else
+		printf(" [W7500P] Serial to Ethernet Device\r\n");
+	#endif
 #endif
-	printf(" Firmware version: %d.%d.%d %s\r\n", dev_config->fw_ver[0], dev_config->fw_ver[1], dev_config->fw_ver[2], STR_VERSION_STATUS);
+	
+	printf(" >> Firmware version: %d.%d.%d %s\r\n", dev_config->fw_ver[0], dev_config->fw_ver[1], dev_config->fw_ver[2], STR_VERSION_STATUS);
 	printf("%s\r\n", STR_BAR);
 }
 
 
 void display_Dev_Info_main(void)
 {
+	//uint8_t i;
 	DevConfig *dev_config = get_DevConfig_pointer();
-
+	uint32_t baud_table[] = {300, 600, 1200, 1800, 2400, 4800, 9600, 14400, 19200, 28800, 38400, 57600, 115200, 230400};
+	
 	printf(" - Device name: %s\r\n", dev_config->module_name);
 	printf(" - Device mode: %s\r\n", str_working[dev_config->network_info[0].working_mode]);
 	
 	printf(" - Network settings: \r\n");
-	printf("\t- IP assign: %s\r\n", (dev_config->options.dhcp_use == 1)?"DHCP":"Static");
+		printf("\t- Obtaining IP settings: [%s]\r\n", (dev_config->options.dhcp_use == 1)?"Automatic - DHCP":"Static");
+		printf("\t- TCP/UDP ports\r\n");
+		printf("\t   + S2E data port: [%d]\r\n", dev_config->network_info[0].local_port);
+		printf("\t   + TCP/UDP setting port: [%d]\r\n", DEVICE_SEGCP_PORT);
+		printf("\t   + Firmware update port: [%d]\r\n", DEVICE_FWUP_PORT);
 	
 	printf(" - Search ID code: \r\n");
-	printf("\t- %s: [%s]\r\n", (dev_config->options.pw_search[0] != 0)?"Enabled":"Disabled", (dev_config->options.pw_search[0] != 0)?dev_config->options.pw_search:"None");
+		printf("\t- %s: [%s]\r\n", (dev_config->options.pw_search[0] != 0)?"Enabled":"Disabled", (dev_config->options.pw_search[0] != 0)?dev_config->options.pw_search:"None");
 	
 	printf(" - Ethernet connection password: \r\n");
-	printf("\t- %s %s\r\n", (dev_config->options.pw_connect_en == 1)?"Enabled":"Disabled", "(TCP server / mixed mode only)");
+		printf("\t- %s %s\r\n", (dev_config->options.pw_connect_en == 1)?"Enabled":"Disabled", "(TCP server / mixed mode only)");
+	
+	printf(" - Connection timer settings: \r\n");
+		printf("\t- Inactivity timer: ");
+			if(dev_config->network_info[0].inactivity) printf("[%d] (sec)\r\n", dev_config->network_info[0].inactivity);
+			else printf("%s\r\n", STR_DISABLED);
+		printf("\t- Reconnect interval: ");
+			if(dev_config->network_info[0].reconnection) printf("[%d] (msec)\r\n", dev_config->network_info[0].reconnection);
+			else printf("%s\r\n", STR_DISABLED);
 	
 	printf(" - Serial settings: \r\n");
-		printf("\t- %d-", baud_table[dev_config->serial_info[0].baud_rate]);
+		printf("\t- Data %s port:  [%s%d]\r\n", STR_UART, STR_UART, SEG_DATA_UART);
+		printf("\t   + UART IF: [%s]\r\n", uart_if_table[dev_config->serial_info[0].uart_interface]);
+		/*
+		printf("Debug: baud_rate = %d, baud_table = %d\r\n", dev_config->serial_info[0].baud_rate, baud_table[dev_config->serial_info[0].baud_rate]);
+		printf("Debug: ");
+		for(i = 0; i < 14; i++) printf("%d, ", baud_table[i]);
+		printf("\r\n");
+		*/
+		printf("\t   + %d-", baud_table[dev_config->serial_info[0].baud_rate]);
 		printf("%d-", word_len_table[dev_config->serial_info[0].data_bits]);
 		printf("%s-", parity_table[dev_config->serial_info[0].parity]);
 		printf("%d / ", stop_bit_table[dev_config->serial_info[0].stop_bits]);
-		printf("Flow Control: %s\r\n", flow_ctrl_table[dev_config->serial_info[0].flow_control]);
-
+		if(dev_config->serial_info[0].uart_interface == UART_IF_RS232_TTL)
+			printf("Flow control: %s\r\n", flow_ctrl_table[dev_config->serial_info[0].flow_control]);
+		else
+			printf("Flow control: %s\r\n", flow_ctrl_table[0]); // RS-422/485; flow control - NONE only
+		
+		printf("\t- Debug %s port: [%s%d]\r\n", STR_UART, STR_UART, SEG_DEBUG_UART);
+		printf("\t   + %s / %s %s\r\n", "115200-8-N-1", "NONE", "(fixed)");
+		
 	printf(" - Serial data packing options:\r\n");
 		printf("\t- Time: ");
-			if(dev_config->network_info[0].packing_time) printf("%d (ms)\r\n", dev_config->network_info[0].packing_time);
+			if(dev_config->network_info[0].packing_time) printf("[%d] (msec)\r\n", dev_config->network_info[0].packing_time);
 			else printf("%s\r\n", STR_DISABLED);
 		printf("\t- Size: ");
-			if(dev_config->network_info[0].packing_size) printf("%d (bytes)\r\n", dev_config->network_info[0].packing_size);
+			if(dev_config->network_info[0].packing_size) printf("[%d] (bytes)\r\n", dev_config->network_info[0].packing_size);
 			else printf("%s\r\n", STR_DISABLED);
 		printf("\t- Char: ");
-			if(dev_config->network_info[0].packing_delimiter_length == 1) printf("[%.2X] (Hex only)\r\n", dev_config->network_info[0].packing_delimiter[0]);
+			if(dev_config->network_info[0].packing_delimiter_length == 1) printf("[%.2X] (hex only)\r\n", dev_config->network_info[0].packing_delimiter[0]);
 			else printf("%s\r\n", STR_DISABLED);
 		
 		printf(" - Serial command mode swtich code:\r\n");
 		printf("\t- %s\r\n", (dev_config->options.serial_command == 1)?STR_ENABLED:STR_DISABLED);
 		printf("\t- [%.2X][%.2X][%.2X] (Hex only)\r\n", dev_config->options.serial_trigger[0], dev_config->options.serial_trigger[1], dev_config->options.serial_trigger[2]);
-
-	printf(" - Hardware informations:\r\n");
-		printf("\t- %s-Data: %s%d\r\n", STR_UART, STR_UART, SEG_DATA_UART);
-		printf("\t- %s-Debug: %s%d\r\n", STR_UART, STR_UART, SEG_DEBUG_UART);
-		printf("\t- Status pin1: %s (PHY link)\r\n", "PA_10");
-		printf("\t- Status pin2: %s (TCP connection)\r\n", "PA_01"); // shared pin; HW_TRIG (input) / TCP connection indicator (output)
+	
+#if (DEVICE_BOARD_NAME == WIZ750SR)
+	printf(" - Hardware information: Status pins\r\n");
+		printf("\t- Status 1: [%s] - %s\r\n", "PA_10", dev_config->serial_info[0].dtr_en?"DTR":"PHY link");
+		printf("\t- Status 2: [%s] - %s\r\n", "PA_01", dev_config->serial_info[0].dsr_en?"DSR":"TCP connection"); // shared pin; HW_TRIG (input) / TCP connection indicator (output)
+	
+	printf(" - Hardware information: User I/O pins\r\n");
+		printf("\t- UserIO A: [%s] - %s / %s\r\n", "PC_13", USER_IO_TYPE_STR[get_user_io_type(USER_IO_SEL[0])], USER_IO_DIR_STR[get_user_io_direction(USER_IO_SEL[0])]); 
+		printf("\t- UserIO B: [%s] - %s / %s\r\n", "PC_12", USER_IO_TYPE_STR[get_user_io_type(USER_IO_SEL[1])], USER_IO_DIR_STR[get_user_io_direction(USER_IO_SEL[1])]); 
+		printf("\t- UserIO C: [%s] - %s / %s\r\n", "PC_09", USER_IO_TYPE_STR[get_user_io_type(USER_IO_SEL[2])], USER_IO_DIR_STR[get_user_io_direction(USER_IO_SEL[2])]); 
+		printf("\t- UserIO D: [%s] - %s / %s\r\n", "PC_08", USER_IO_TYPE_STR[get_user_io_type(USER_IO_SEL[3])], USER_IO_DIR_STR[get_user_io_direction(USER_IO_SEL[3])]); 
+#endif
+	
 	printf("%s\r\n", STR_BAR);
 }
 

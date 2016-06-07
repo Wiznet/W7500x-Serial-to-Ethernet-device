@@ -2,6 +2,8 @@
 #include <string.h>
 #include <ctype.h>
 
+#include "W7500x_gpio.h"
+
 #include "common.h"
 #include "W7500x_board.h"
 #include "W7500x_wztoe.h"
@@ -14,6 +16,8 @@
 #include "segcp.h"
 #include "util.h"
 #include "uartHandler.h"
+#include "gpioHandler.h"
+#include "timerHandler.h"
 
 /* Private define ------------------------------------------------------------*/
 // Ring Buffer declaration
@@ -34,8 +38,10 @@ uint8_t * tbSEGCPCMD[] = {"MC", "VR", "MN", "IM", "OP", "DD", "CP", "PO", "DG", 
 							"DP", "DI", "DW", "DH", "LP", "RP", "RH", "BR", "DB", "PR",
 							"SB", "FL", "IT", "PT", "PS", "PD", "TE", "SS", "NP", "SP",
 							"LG", "ER", "FW", "MA", "PW", "SV", "EX", "RT", "UN", "ST",
-							"FR", "EC", "K!", "UE", "FS", "FC", "FP", "FD", "FH", 0};
-                            
+							"FR", "EC", "K!", "UE", "GA", "GB", "GC", "GD", "CA", "CB", 
+							"CC", "CD", "SC", "S0", "S1", "RX", "FS", "FC", "FP", "FD",
+							"FH", "UI", 0};
+
 uint8_t * tbSEGCPERR[] = {"ERNULL", "ERNOTAVAIL", "ERNOPARAM", "ERIGNORED", "ERNOCOMMAND", "ERINVALIDPARAM", "ERNOPRIVILEGE"};
 
 uint8_t gSEGCPPRIVILEGE = SEGCP_PRIVILEGE_CLR;
@@ -112,22 +118,45 @@ void do_segcp(void)
 	
 		if(segcp_ret & SEGCP_RET_FWUP)
 		{
+#ifdef __USE_APPBACKUP_AREA__
+			/* System Core Clock Update for improved stability */
+			{
+				/* System Core Clock Update */
+				SystemCoreClockUpdate_User(CLOCK_SOURCE_INTERNAL, PLL_SOURCE_8MHz, SYSTEM_CLOCK_8MHz);
+				
+				/* Simple UART init for Debugging */
+				UART2_Configuration();
+				
+				/* DualTimer Re-Initialization */
+				Timer_Configuration();
+			}
+#endif
+			// SystemClock Debug
+			//printf("\r\n >> W7500x MCU Clock Settings: FW update ====\r\n"); 
+			//printf(" - GetPLLSource: %s, %lu (Hz)\r\n", GetPLLSource()?"External":"Internal", DEVICE_PLL_SOURCE_CLOCK);
+			//printf(" - SetSystemClock: %lu (Hz) \r\n", PLL_SOURCE_8MHz);
+			//printf(" - GetSystemClock: %d (Hz) \r\n", GetSystemClock());
+			
 			status_bak = (teDEVSTATUS)get_device_status();
 			set_device_status(ST_UPGRADE);
 			
 			if((segcp_ret & SEGCP_RET_FWUP) == segcp_ret)				ret = device_firmware_update(NETWORK_APP_BACKUP); // Firmware update by Configuration tool
+#ifdef __USE_APPBACKUP_AREA__
+			// 'Firmware update via Web Server' function supports '__USE_APPBACKUP_AREA__' mode only
 			else if((segcp_ret & SEGCP_RET_FWUP_SERVER) == segcp_ret)	ret = device_firmware_update(SERVER_APP_BACKUP); // or Firmware update by HTTP Server
+#endif
 			else ret = DEVICE_FWUP_RET_FAILED;
 			
 			if(ret == DEVICE_FWUP_RET_SUCCESS)
 			{
+				/*
 				if((opmode == DEVICE_AT_MODE) && ((segcp_ret & SEGCP_RET_FWUP_SERVER) == segcp_ret))
 				{
 					// for AT mode
 					uart_puts(SEG_DATA_UART, "FS:UPDATE_SUCCESS\r\n", 19);
 					uart_puts(SEG_DATA_UART, "REBOOT\r\n", 8);
 				}
-				
+				*/
 				set_device_status(ST_OPEN);
 				save_DevConfig_to_storage();
 				
@@ -139,15 +168,36 @@ void do_segcp(void)
 				dev_config->firmware_update.fwup_size = 0;
 				dev_config->firmware_update.fwup_flag = SEGCP_DISABLE;
 				dev_config->firmware_update_extend.fwup_server_flag = SEGCP_DISABLE;
-				
+				/*
 				if((opmode == DEVICE_AT_MODE) && ((segcp_ret & SEGCP_RET_FWUP_SERVER) == segcp_ret))
 				{
 					uart_puts(SEG_DATA_UART, "FS:UPDATE_FAILED\r\n", 18);
 				}
-				
+				*/
 				set_device_status(status_bak);
+				
+#ifdef __USE_APPBACKUP_AREA__
+				/* System Core Clock Update - Restore */
+				{
+					/* System Core Clock Update - Restore */
+					SystemCoreClockUpdate_User(DEVICE_CLOCK_SELECT, DEVICE_PLL_SOURCE_CLOCK, DEVICE_TARGET_SYSTEM_CLOCK);
+					
+					/* Simple UART init for Debugging */
+					UART2_Configuration();
+					
+					/* DualTimer Re-Initialization */
+					Timer_Configuration();
+				}
+#endif
+				// SystemClock Debug
+				//printf("\r\n >> W7500x MCU Clock Settings: Restore ======\r\n"); 
+				//printf(" - GetPLLSource: %s, %lu (Hz)\r\n", GetPLLSource()?"External":"Internal", DEVICE_PLL_SOURCE_CLOCK);
+				//printf(" - SetSystemClock: %lu (Hz) \r\n", DEVICE_SYSTEM_SOURCE_CLOCK);
+				//printf(" - GetSystemClock: %d (Hz) \r\n", GetSystemClock());
 			}
 			
+			// If this device worked unstable after fw update failed problem occurred, users can add the device_reboot() function at below.
+			//device_reboot();
 		}
 		else if (segcp_ret & SEGCP_RET_REBOOT)
 		{
@@ -169,7 +219,7 @@ uint8_t parse_SEGCP(uint8_t * pmsg, uint8_t * param)
 
 	for(pcmd = tbSEGCPCMD; *pcmd != 0; pcmd++)
 	{
-		if(!strncmp(pmsg, *pcmd, strlen(*pcmd))) break;
+		if(!strncmp((char *)pmsg, *pcmd, strlen(*pcmd))) break;
 	}
 	
 	if(*pcmd == 0) 
@@ -234,19 +284,24 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 {
 	DevConfig *dev_config = get_DevConfig_pointer();
 	
-	uint8_t  i = 0;
+	//uint8_t  i = 0;
 	uint16_t ret = 0;
 	uint8_t  cmdnum = 0;
 	uint8_t* treq;
-	uint8_t* trep = segcp_rep;
+	//uint8_t* trep = segcp_rep;
+	char * trep = segcp_rep;
 	uint16_t param_len = 0;
+	
+	uint8_t  io_num = 0;
+	uint8_t  io_type = 0;
+	uint8_t  io_dir = 0;
 	
 	uint8_t  tmp_byte = 0;
 	uint16_t tmp_int = 0;
 	uint32_t tmp_long = 0;
 	
 	uint8_t tmp_ip[4];
-	uint8_t tmp_ip_cnt = 0;
+	
 
 	uint8_t param[SEGCP_PARAM_MAX*2];
 	
@@ -409,6 +464,49 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 					case SEGCP_FW: ret |= SEGCP_RET_ERR_NOPARAM;
 						break;
 ///////////////////////////////////////////////////////////////////////////////////////////////
+// User GPIOs
+					// GET GPIOs Status / Value
+					case SEGCP_GA:
+					case SEGCP_GB:
+					case SEGCP_GC:
+					case SEGCP_GD:
+						io_num = (teSEGCPCMDNUM)cmdnum - SEGCP_GA;
+						if(get_user_io_val(USER_IO_SEL[io_num], &tmp_int) != 0) sprintf(trep, "%d", tmp_int);
+						else ret |= SEGCP_RET_ERR_NOTAVAIL;
+						break;
+					
+					// GET GPIOs settings; Type and Direction
+					case SEGCP_CA:
+					case SEGCP_CB:
+					case SEGCP_CC:
+					case SEGCP_CD:
+						io_num = (teSEGCPCMDNUM)cmdnum - SEGCP_CA;
+						io_type = get_user_io_type(USER_IO_SEL[io_num]);
+						io_dir = get_user_io_direction(USER_IO_SEL[io_num]);
+						sprintf(trep, "%d", (((io_type & 0x01) << 1) | io_dir));
+						//sprintf(trep, "%d%d", get_user_io_type(USER_IO_SEL[io_num]), get_user_io_direction(USER_IO_SEL[io_num]));
+						break;
+///////////////////////////////////////////////////////////////////////////////////////////////
+// Status Pins
+					// GET Status pin's setting and status
+					case SEGCP_SC: // mode select
+						sprintf(trep, "%d%d", dev_config->serial_info[0].dtr_en, dev_config->serial_info[0].dsr_en);
+						break;
+					case SEGCP_S0:
+						sprintf(trep, "%d", get_connection_status_io(STATUS_PHYLINK_PIN)); // STATUS_PHYLINK_PIN (in) == DTR_PIN (out)
+						break;
+					case SEGCP_S1:
+						sprintf(trep, "%d", get_connection_status_io(STATUS_TCPCONNECT_PIN)); // STATUS_TCPCONNECT_PIN (in) == DSR_PIN (in)
+						break;
+///////////////////////////////////////////////////////////////////////////////////////////////
+// UART Rx flush
+					case SEGCP_RX:
+						uart_rx_flush(SEG_DATA_UART);
+						sprintf(trep, "%s", "FLUSH");
+						//ret |= SEGCP_RET_ERR_NOTAVAIL;
+						break;
+///////////////////////////////////////////////////////////////////////////////////////////////
+// Firmware Update via HTTP server (Under Development)
 					case SEGCP_FS: // Firmware update by HTTP Server
 						dev_config->firmware_update.fwup_flag = SEGCP_ENABLE;
 						dev_config->firmware_update_extend.fwup_server_flag = SEGCP_ENABLE;
@@ -450,7 +548,6 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						//if(dev_config->dev_config->firmware_update_extend.fwup_server_binpath[0] == 0) sprintf(trep,"%c",SEGCP_NULL);
 						//else sprintf(trep, "%s", dev_config->firmware_update_extend.fwup_server_binpath);
 						break;
-
 ///////////////////////////////////////////////////////////////////////////////////////////////
 					case SEGCP_SV:
 						if(gSEGCPPRIVILEGE & (SEGCP_PRIVILEGE_SET|SEGCP_PRIVILEGE_WRITE)) ret |= SEGCP_RET_SAVE;
@@ -464,7 +561,16 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						if(gSEGCPPRIVILEGE & (SEGCP_PRIVILEGE_SET|SEGCP_PRIVILEGE_WRITE)) ret |= SEGCP_RET_REBOOT;
 						else ret |= SEGCP_RET_ERR_NOPRIVILEGE;
 						break;
-					case SEGCP_UN: sprintf(trep, "%d", DEVICE_UART_CNT);
+					case SEGCP_UN:
+						// NEW: UART Interface String - TTL/RS-232 or RS-422/485
+						sprintf(trep, "%s", uart_if_table[dev_config->serial_info[0].uart_interface]);
+						
+						// OLD: UART COUNT
+						//sprintf(trep, "%d", DEVICE_UART_CNT); 
+						break;
+					case SEGCP_UI: 
+						// NEW: UART Interface Number- [0] TTL/RS-232 or [1] RS-422/485
+						sprintf(trep, "%d", dev_config->serial_info[0].uart_interface);
 						break;
 					case SEGCP_ST: sprintf(trep, "%s", strDEVSTATUS[dev_config->network_info[0].state]);
 						break;
@@ -721,8 +827,21 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						break;
 					case SEGCP_FL:
 						tmp_byte = is_hex(*param);
-						if(param_len != 1 || tmp_byte > flow_rts_cts) ret |= SEGCP_RET_ERR_INVALIDPARAM;
-						else dev_config->serial_info[0].flow_control = tmp_byte;
+						if(param_len != 1 || tmp_byte > flow_rts_cts)
+						{
+							ret |= SEGCP_RET_ERR_INVALIDPARAM;
+						}
+						else
+						{
+							if(dev_config->serial_info[0].uart_interface == UART_IF_RS422_485)
+							{
+								dev_config->serial_info[0].flow_control = flow_none;
+							}
+							else
+							{
+								dev_config->serial_info[0].flow_control = tmp_byte;
+							}
+						}
 						break;
 					case SEGCP_IT:
 						sscanf(param, "%ld", &tmp_long);
@@ -746,12 +865,15 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						}
 						else
 						{
-							sscanf(param,"%x", &dev_config->network_info[0].packing_delimiter[0]);
+							sscanf(param,"%x", &tmp_int);
+							dev_config->network_info[0].packing_delimiter[0] = (uint8_t)tmp_int;
+							
 							if(dev_config->network_info[0].packing_delimiter[0] == 0x00) 
 								dev_config->network_info[0].packing_delimiter_length = 0;
 							else 
 								dev_config->network_info[0].packing_delimiter_length = 1;
 						}
+						
 						break;
 					case SEGCP_TE:
 						tmp_byte = is_hex(*param);
@@ -761,7 +883,7 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 					case SEGCP_SS:
 						if(param_len != 6 || !is_hexstr(param) || !str_to_hex(param, dev_config->options.serial_trigger))
 						{
-							printf(">> SEGCP_SS = %.2X %.2X %.2X", dev_config->options.serial_trigger[0], dev_config->options.serial_trigger[1], dev_config->options.serial_trigger[2]);
+							//printf(">> SEGCP_SS = %.2X %.2X %.2X", dev_config->options.serial_trigger[0], dev_config->options.serial_trigger[1], dev_config->options.serial_trigger[2]);
 							ret |= SEGCP_RET_ERR_INVALIDPARAM;
 						}
 						break;
@@ -789,7 +911,11 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						break;
 					case SEGCP_FW:
 						sscanf(param, "%ld", &tmp_long);
-						if(tmp_long > (((uint32_t)DEVICE_FWUP_SIZE) & 0x0FFFF))
+#ifdef __USE_APPBACKUP_AREA__
+						if(tmp_long > (((uint32_t)DEVICE_FWUP_SIZE) & 0x0FFFF)) // 64KByte
+#else
+						if(tmp_long > (((uint32_t)DEVICE_FWUP_SIZE) & 0x19000)) // 100KByte
+#endif
 						{
 							dev_config->firmware_update.fwup_size = 0;
 							ret |= SEGCP_RET_ERR_INVALIDPARAM;
@@ -799,7 +925,11 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						}
 						else
 						{
+#ifdef __USE_APPBACKUP_AREA__
 							dev_config->firmware_update.fwup_size = (uint16_t)tmp_long;
+#else
+							dev_config->firmware_update.fwup_size = tmp_long;
+#endif
 							dev_config->firmware_update.fwup_flag = SEGCP_ENABLE;
 							ret |= SEGCP_RET_FWUP;
 							sprintf(trep,"FW%d.%d.%d.%d:%d:%d\r\n", dev_config->network_info_common.local_ip[0], dev_config->network_info_common.local_ip[1]
@@ -812,6 +942,87 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						}
 						break;
 ///////////////////////////////////////////////////////////////////////////////////////////////
+// User GPIOs
+					// SET GPIOs Status / Value (Digital output only)
+					case SEGCP_GA:
+					case SEGCP_GB:
+					case SEGCP_GC:
+					case SEGCP_GD:
+						io_num = (teSEGCPCMDNUM)cmdnum - SEGCP_GA;
+						tmp_int = is_hex(*param);
+						if(param_len != 1 || tmp_int > IO_HIGH) ret |= SEGCP_RET_ERR_INVALIDPARAM;
+						else
+						{
+							if(set_user_io_val(USER_IO_SEL[io_num], &tmp_int) == 0) ret |= SEGCP_RET_ERR_INVALIDPARAM;
+						}
+						break;
+					
+					// SET GPIOs settings; Type and Direction ('Analog output' mode is not allowed)
+					case SEGCP_CA:
+					case SEGCP_CB:
+					case SEGCP_CC:
+					case SEGCP_CD:
+						io_num = (teSEGCPCMDNUM)cmdnum - SEGCP_CA;
+						sscanf(param, "%x", &tmp_int);
+						
+						io_type = (uint8_t)(tmp_int >> 1);
+						io_dir = (uint8_t)(tmp_int & 0x01);
+						
+						if((param_len > 2) || (io_type > IO_ANALOG_IN) || (io_dir > IO_OUTPUT)) // Invalid parameters
+						{
+							ret |= SEGCP_RET_ERR_INVALIDPARAM;
+						}
+						else
+						{
+							if((io_type == IO_ANALOG_IN) && (io_dir == IO_OUTPUT)) // This case not allowed. (Analog output)
+							{
+								ret |= SEGCP_RET_ERR_INVALIDPARAM;
+							}
+							else
+							{
+								// IO type and Direction settings
+								set_user_io_type(USER_IO_SEL[io_num], io_type);
+								set_user_io_direction(USER_IO_SEL[io_num], io_dir);
+								init_user_io(USER_IO_SEL[io_num]);
+							}
+						}
+						break;
+///////////////////////////////////////////////////////////////////////////////////////////////
+// Status Pins
+					// SET status pin mode selector
+					case SEGCP_SC:
+						sscanf(param, "%x", &tmp_int);
+						
+						tmp_byte = (uint8_t)((tmp_int & 0xF0) >> 4); // [0] PHY link / [1] DTR
+						tmp_int = (tmp_int & 0x0F); // [0] TCP connection / [1] DSR
+						
+						if((param_len > 2) || (tmp_byte > IO_HIGH) || (tmp_int > IO_HIGH)) // Invalid parameters
+						{
+							ret |= SEGCP_RET_ERR_INVALIDPARAM;
+						}
+						else
+						{
+							dev_config->serial_info[0].dtr_en = tmp_byte;
+							dev_config->serial_info[0].dsr_en = (uint8_t)tmp_int;
+							
+							// Status I/O - Shared pin init: Connection status pins or DTR/DSR pins
+							init_connection_status_io(); 
+							
+							// Set the DTR pin to high when the DTR signal enabled (== PHY link status disabled)
+							if(dev_config->serial_info[0].dtr_en == SEGCP_ENABLE) set_flowcontrol_dtr_pin(ON);
+						}
+						break;
+					case SEGCP_S0:
+					case SEGCP_S1:
+						ret |= SEGCP_RET_ERR_INVALIDPARAM;
+						break;
+///////////////////////////////////////////////////////////////////////////////////////////////
+// UART Rx flush
+					case SEGCP_RX:
+						ret |= SEGCP_RET_ERR_INVALIDPARAM;
+						break;
+///////////////////////////////////////////////////////////////////////////////////////////////
+// Firmware Update via HTTP server (Under Development)
 					case SEGCP_FS: // Firmware update by HTTP Server
 						ret |= SEGCP_RET_ERR_INVALIDPARAM;
 						break;
@@ -827,6 +1038,7 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						if(tmp_int > 0xffff) ret |= SEGCP_RET_ERR_INVALIDPARAM;
 						else dev_config->firmware_update_extend.fwup_server_port = tmp_int;
 						break;
+					
 					// Planned to apply
 					case SEGCP_FD: // HTTP Server domain for Firmware update
 						ret |= SEGCP_RET_ERR_INVALIDPARAM;
@@ -853,6 +1065,7 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						break;
 
 					case SEGCP_UN:
+					case SEGCP_UI:
 					case SEGCP_ST:
 					case SEGCP_LG:
 					case SEGCP_ER: 
@@ -909,7 +1122,7 @@ uint16_t proc_SEGCP_udp(uint8_t* segcp_req, uint8_t* segcp_rep)
 	
 	uint8_t ret = 0;
 	uint16_t len = 0;
-	uint16_t i = 0;
+	//uint16_t i = 0;
 	
 	uint8_t destip[4];
 	uint16_t destport;
@@ -994,6 +1207,7 @@ uint16_t proc_SEGCP_tcp(uint8_t* segcp_req, uint8_t* segcp_rep)
 	uint16_t ret = 0;
 	uint16_t len = 0;
 	uint16_t i = 0;
+	
 	uint8_t tpar[SEGCP_PARAM_MAX+1];
 	uint8_t * treq;
 	uint8_t * trep;
@@ -1170,10 +1384,11 @@ void send_keepalive_packet_configtool(uint8_t sock)
 	setsockopt(sock, SO_KEEPALIVESEND, 0);
 	//keepalive_time = 0;
 #ifdef _SEGCP_DEBUG_
-	printf("SOCKET[%x]: SEND KEEP-ALIVE PACKET\r\n", sock);
+	printf(" > SOCKET[%x]: SEND KEEP-ALIVE PACKET\r\n", sock);
 #endif 
 }
 
+// Function for Timer
 void segcp_timer_msec(void)
 {
 	if(enable_configtool_keepalive_timer)

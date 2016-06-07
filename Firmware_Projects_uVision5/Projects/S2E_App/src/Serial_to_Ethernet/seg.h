@@ -8,13 +8,12 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define SEG_DATA_UART		0	// S2E Data UART selector, 0 (UART0) or 1 (UART1)
+#define SEG_DATA_UART		0	// S2E Data UART selector, [0] UART0 or [1] UART1
 #define SEG_DEBUG_UART		2	// S2E Debug UART, fixed
 
-#define SEG_DATA_BUF_SIZE	512	// UART Ring buffer size
-//#define SEG_DATA_BUF_SIZE	3072	// UART Ring buffer size
 //#define SEG_DATA_BUF_SIZE	2048	// UART Ring buffer size
-//#define SEG_DEBUG_BUF_SIZE	128		// UART Ring buffer size
+//#define SEG_DATA_BUF_SIZE	3072	// UART Ring buffer size
+#define SEG_DATA_BUF_SIZE	4096	// UART Ring buffer size
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 #define DEFAULT_MODESWITCH_INTER_GAP	500 // 500ms (0.5sec)
@@ -22,7 +21,7 @@
 //#define MIXED_CLIENT_INFINITY_CONNECT
 #ifndef MIXED_CLIENT_INFINITY_CONNECT
 	#define MIXED_CLIENT_LIMITED_CONNECT 		//  TCP_MIXED_MODE: TCP CLIENT - limited count of connection retries
-	#define MAX_RECONNECTION_COUNT			8
+	#define MAX_RECONNECTION_COUNT			10
 #endif
 
 #define MAX_CONNECTION_AUTH_TIME		5000 // 5000ms (5sec)

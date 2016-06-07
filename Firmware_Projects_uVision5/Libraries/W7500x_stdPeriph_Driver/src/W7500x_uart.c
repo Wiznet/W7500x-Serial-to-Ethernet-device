@@ -45,12 +45,31 @@ uint32_t UART_Init(UART_TypeDef *UARTx, UART_InitTypeDef* UART_InitStruct)
 
 
     UARTx->CR &= ~(UART_CR_UARTEN); 
-
-    // Set baudrate
-    CRG->UARTCLK_SSR = CRG_UARTCLK_SSR_RCLK;  // Set UART Clock using internal Oscilator ( 8MHz )
-    //CRG->UARTCLK_SSR = CRG_UARTCLK_SSR_OCLK;  // Set UART Clock using external Oscilator
-    uartclock =  (8000000UL) /  (1 << CRG->UARTCLK_PVSR);
-
+//////////////////////////////////////////////////////////////////////////////////////
+	// Set baudrate
+	//CRG->UARTCLK_SSR = CRG_UARTCLK_SSR_RCLK;  // Set UART Clock using internal Oscilator ( 8MHz )
+	//uartclock =  (8000000UL) /  (1 << CRG->UARTCLK_PVSR);
+	// or
+	//CRG->UARTCLK_SSR = CRG_UARTCLK_SSR_OCLK;  // Set UART Clock using external Oscilator
+	//uartclock =  (48000000UL) /  (1 << CRG->UARTCLK_PVSR);
+	// or
+	//CRG->UARTCLK_SSR = CRG_UARTCLK_SSR_MCLK;
+	//uartclock =  (48000000UL) /  (1 << CRG->UARTCLK_PVSR);
+	
+	// ## 20160315 Eric added
+	// Set baudrate
+	if(GetPLLSource() == CRG_PLL_IFSR_RCLK) // Internal OSC
+	{
+		CRG->UARTCLK_SSR = CRG_UARTCLK_SSR_RCLK;  // Set UART Clock using internal Oscilator ( 8MHz )
+		uartclock =  INTERN_XTAL /  (1 << CRG->UARTCLK_PVSR); // INTERNA_XTAL = (8000000UL)
+	}
+	else // CRG_PLL_IFSR_OCLK, External OSC
+	{
+		CRG->UARTCLK_SSR = CRG_UARTCLK_SSR_MCLK;
+		uartclock =  GetSystemClock() /  (1 << CRG->UARTCLK_PVSR);
+	}
+	
+//////////////////////////////////////////////////////////////////////////////////////
     baud_divisor = ((float)uartclock / (16 * UART_InitStruct->UART_BaudRate));
     integer_baud = (uint32_t)baud_divisor;
     fractional_baud = (uint32_t)((baud_divisor - integer_baud) * 64 + 0.5);
@@ -235,12 +254,23 @@ uint32_t S_UART_Init(uint32_t baud)
 void S_UART_SetBaud(uint32_t baud)
 {
     uint32_t uartclock = 0x00, integer_baud = 0x00;
-
+	
     assert_param(IS_UART_MODE(S_UART_InitStruct->UART_Mode));
-
+    
+    // ## Eric added
+	if((CRG->FCLK_SSR == CRG_FCLK_SSR_RCLK) || (CRG->FCLK_SSR == CRG_FCLK_SSR_OCLK))
+	{
+		uartclock = GetSourceClock();
+	}
+	else
+	{
+		uartclock = GetSystemClock();
+	}
+	
+/*
     if(CRG->FCLK_SSR == CRG_FCLK_SSR_RCLK)
     {
-        uartclock = INTERN_XTAL;  
+        uartclock = INTERN_XTAL;
     }
     else if(CRG->FCLK_SSR == CRG_FCLK_SSR_OCLK)
     {
@@ -250,7 +280,7 @@ void S_UART_SetBaud(uint32_t baud)
     {
         uartclock = GetSystemClock();
     }
-
+*/
     integer_baud = (uint32_t)(uartclock / baud);
     UART2->BAUDDIV = integer_baud;
 }

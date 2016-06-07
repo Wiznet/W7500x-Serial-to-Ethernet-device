@@ -16,7 +16,6 @@
 #include "dns.h"
 
 uint16_t get_firmware_from_network(uint8_t sock, uint8_t * buf);
-//uint16_t get_firmware_from_server(uint8_t sock, uint8_t * buf);
 uint16_t get_firmware_from_server(uint8_t sock, uint8_t * server_ip, uint8_t * buf);
 uint16_t gen_http_fw_request(uint8_t * buf);
 int8_t process_dns_fw_server(uint8_t * domain_ip, uint8_t * buf);
@@ -33,7 +32,6 @@ volatile uint16_t fw_from_network_time = 0;
 uint8_t flag_fw_from_network_timeout = SEGCP_DISABLE;
 
 uint8_t flag_fw_from_server_failed = SEGCP_DISABLE;
-
 static uint16_t any_port = 0;
 
 //extern uint8_t g_send_buf[DATA_BUF_SIZE]; // for dns query to HTTP server
@@ -71,6 +69,8 @@ void device_reboot(void)
 	while(1);
 }
 
+
+#ifdef __USE_APPBACKUP_AREA__ // 50kB App + 50kB App-backup mode
 
 	// if(stype == STORAGE_APP_BACKUP)	>>> Config tool -> STORAGE_APP_BACKUP (App, network to flash update)
 	// if(stype == STORAGE_APP_MAIN) 	>>> STORAGE_APP_BACKUP -> STORAGE_APP_MAIN (Boot, flash to flash update)
@@ -128,7 +128,7 @@ uint8_t device_firmware_update(teDATASTORAGE stype)
 		
 		
 	// App, FW update from Network (ethernet) to Flash memory (backup area)
-	if(stype == NETWORK_APP_BACKUP || stype == SERVER_APP_BACKUP)
+	if((stype == NETWORK_APP_BACKUP) || (stype == SERVER_APP_BACKUP))
 	{
 		if(serial->serial_debug_en == SEGCP_ENABLE)
 		{
@@ -206,49 +206,108 @@ uint8_t device_firmware_update(teDATASTORAGE stype)
 	return ret;
 }
 
-int8_t process_dns_fw_server(uint8_t * fw_remote_ip, uint8_t * buf)
+#else // 100kB App mode
+
+uint8_t device_firmware_update(teDATASTORAGE stype)
 {
-	struct __firmware_update_extend *fwupdate_server = (struct __firmware_update_extend *)&(get_DevConfig_pointer()->firmware_update_extend);
-	struct __options *option = (struct __options *)&(get_DevConfig_pointer()->options);
+	struct __firmware_update *fwupdate = (struct __firmware_update *)&(get_DevConfig_pointer()->firmware_update);
+	struct __serial_info *serial = (struct __serial_info *)&(get_DevConfig_pointer()->serial_info);
 	
-	int8_t ret = 0;
-	uint8_t dns_retry = 0;
-	//uint8_t dns_server_ip[4];
-	//sprintf((char *)g_send_buf, "%s%s", FWUP_SERVER_DOMAIN, FWUP_SERVER_BINPATH);
+	uint8_t ret = DEVICE_FWUP_RET_PROGRESS; // No Meaning, [Firmware update process] have to work as blocking function.
+	//uint16_t len = 0;
+	uint16_t recv_len = 0;
+	uint16_t write_len = 0;
+	static uint32_t write_fw_len;
 	
-#ifdef _FWUP_DEBUG_
-	printf(" - DNS Client running: FW update server\r\n");
-#endif
-	
-	DNS_init(SOCK_DNS, buf);
-	
-	while(1) 
+	//teDATASTORAGE src_storage;
+	//uint32_t src_storage_addr, target_storage_addr;
+//#ifdef _FWUP_DEBUG_
+	//uint8_t update_cnt = 0;
+//#endif
+	if(fwupdate->fwup_flag == SEGCP_DISABLE)	return DEVICE_FWUP_RET_FAILED;
+	if((fwupdate->fwup_size == 0) || (fwupdate->fwup_size > DEVICE_FWUP_SIZE))
 	{
-		if((ret = DNS_run(option->dns_server_ip, (uint8_t *)FWUP_SERVER_DOMAIN, (uint8_t *)fw_remote_ip)) == 1)
+		if(serial->serial_debug_en == SEGCP_ENABLE)
 		{
-#ifdef _FWUP_DEBUG_
-			printf(" - DNS Success: Firmware Server IP is %d.%d.%d.%d\r\n", fw_remote_ip[0], fw_remote_ip[1], fw_remote_ip[2], fw_remote_ip[3]);
-#endif
-			break;
-		}
-		else
-		{
-			dns_retry++;
-#ifdef _FWUP_DEBUG_
-			if(dns_retry <= 2) printf(" - DNS Timeout occurred and retry [%d]\r\n", dns_retry);
-#endif
+			printf(" > SEGCP:FW_UPDATE:FAILED - Invalid firmware size: %d bytes (Firmware size must be within %d bytes)\r\n", fwupdate->fwup_size, DEVICE_FWUP_SIZE);
 		}
 
-		if(dns_retry > 2) {
-#ifdef _FWUP_DEBUG_
-			printf(" - DNS Failed\r\n\r\n");
-#endif
-			break;
-		}
+		return DEVICE_FWUP_RET_FAILED;
 	}
+	
+	// App, FW update from Network (ethernet) to Flash memory (backup area)
+	if(stype == STORAGE_APP_MAIN)
+	{
+		if(serial->serial_debug_en == SEGCP_ENABLE)
+		{
+			printf(" > SEGCP:FW_UPDATE:NETWORK - Firmware size: [%d] bytes\r\n", fwupdate->fwup_size);
+		}
+
+		write_fw_len = 0;
+		erase_storage(STORAGE_APP_MAIN); // Erase application backup blocks
+		erase_storage(STORAGE_APP_BACKUP); // Erase application backup blocks
+		
+		// init firmware update timer
+		enable_fw_update_timer = SEGCP_ENABLE;
+		
+		do 
+		{
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+			recv_len = get_firmware_from_network(SOCK_FWUPDATE, g_recv_buf);
+			
+			if(recv_len > 0)
+			{
+				write_len = write_storage(STORAGE_APP_MAIN, (DEVICE_APP_MAIN_ADDR + write_fw_len), g_recv_buf, recv_len);
+				write_fw_len += write_len;
+				fw_update_time = 0; // Reset fw update timeout counter
+			}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+			
+			// Firmware update failed: Timeout occurred
+			if(flag_fw_update_timeout == SEGCP_ENABLE)
+			{
+				if(serial->serial_debug_en == SEGCP_ENABLE) printf(" > SEGCP:FW_UPDATE:FAILED - Firmware update timeout\r\n");
+				ret = DEVICE_FWUP_RET_FAILED;
+				break;
+			}
+			
+			// Firmware update failed: timeout occurred at get_firmware_from_network() function
+			if(flag_fw_from_network_timeout == SEGCP_ENABLE)
+			{
+				if(serial->serial_debug_en == SEGCP_ENABLE) printf(" > SEGCP:FW_UPDATE:FAILED - Network download timeout\r\n");
+				ret = DEVICE_FWUP_RET_FAILED;
+				break;
+			}
+			
+		} while(write_fw_len < fwupdate->fwup_size);
+	}	
+	else if((stype == NETWORK_APP_BACKUP) || stype == SERVER_APP_BACKUP) // Run this code in the boot area only
+	{
+		printf(" > SEGCP:FW_UPDATE:FAILED - Please try to FW Update at APPBOOT mode\r\n");
+		
+		return DEVICE_FWUP_RET_FAILED;
+	}
+	else
+	{
+		ret = DEVICE_FWUP_RET_FAILED;
+	}
+	
+	// shared code
+	if(write_fw_len == fwupdate->fwup_size)
+	{
+		if(serial->serial_debug_en == SEGCP_ENABLE)
+		{
+			printf(" > SEGCP:FW_UPDATE:SUCCESS - %d / %d bytes\r\n", write_fw_len, fwupdate->fwup_size);
+		}
+		ret = DEVICE_FWUP_RET_SUCCESS;
+	}
+	
+	reset_fw_update_timer();
 	
 	return ret;
 }
+
+#endif
 
 
 uint16_t get_firmware_from_network(uint8_t sock, uint8_t * buf)
@@ -283,7 +342,8 @@ uint16_t get_firmware_from_network(uint8_t sock, uint8_t * buf)
 #ifdef _FWUP_DEBUG_
 				printf(" > SEGCP:FW_UPDATE:NET_TIMEOUT\r\n");
 #endif
-				disconnect(sock);
+				//disconnect(sock);
+				close(sock);
 				return 0;
 			}
 			
@@ -509,6 +569,49 @@ uint16_t get_firmware_from_server(uint8_t sock, uint8_t * server_ip, uint8_t * b
 	return len;
 }
 
+int8_t process_dns_fw_server(uint8_t * fw_remote_ip, uint8_t * buf)
+{
+	struct __firmware_update_extend *fwupdate_server = (struct __firmware_update_extend *)&(get_DevConfig_pointer()->firmware_update_extend);
+	struct __options *option = (struct __options *)&(get_DevConfig_pointer()->options);
+	
+	int8_t ret = 0;
+	uint8_t dns_retry = 0;
+	//uint8_t dns_server_ip[4];
+	//sprintf((char *)g_send_buf, "%s%s", FWUP_SERVER_DOMAIN, FWUP_SERVER_BINPATH);
+	
+#ifdef _FWUP_DEBUG_
+	printf(" - DNS Client running: FW update server\r\n");
+#endif
+	
+	DNS_init(SOCK_DNS, buf);
+	
+	while(1) 
+	{
+		if((ret = DNS_run(option->dns_server_ip, (uint8_t *)FWUP_SERVER_DOMAIN, (uint8_t *)fw_remote_ip)) == 1)
+		{
+#ifdef _FWUP_DEBUG_
+			printf(" - DNS Success: Firmware Server IP is %d.%d.%d.%d\r\n", fw_remote_ip[0], fw_remote_ip[1], fw_remote_ip[2], fw_remote_ip[3]);
+#endif
+			break;
+		}
+		else
+		{
+			dns_retry++;
+#ifdef _FWUP_DEBUG_
+			if(dns_retry <= 2) printf(" - DNS Timeout occurred and retry [%d]\r\n", dns_retry);
+#endif
+		}
+
+		if(dns_retry > 2) {
+#ifdef _FWUP_DEBUG_
+			printf(" - DNS Failed\r\n\r\n");
+#endif
+			break;
+		}
+	}
+	
+	return ret;
+}
 
 uint16_t gen_http_fw_request(uint8_t * buf)
 {
@@ -520,7 +623,6 @@ uint16_t gen_http_fw_request(uint8_t * buf)
 	len = sprintf((char *)buf, "GET %s HTTP/1.1\r\n", FWUP_SERVER_BINPATH);
 	len += sprintf((char *)buf+len, "Host: %s\r\n", FWUP_SERVER_DOMAIN);
 	len += sprintf((char *)buf+len, "Connection: keep-alive\r\n");
-	//len += sprintf((char *)buf+len, "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8\r\n");
 	len += sprintf((char *)buf+len, "\r\n");
 	
 #ifdef _FWUP_DEBUG_

@@ -2,29 +2,27 @@
 #define DEVICEHANDLER_H_
 
 #include <stdint.h>
+#include "W7500x_board.h"
 #include "storageHandler.h"
 
 /* Debug message enable */
 //#define _FWUP_DEBUG_
 
-
 /* Application Port */
-#define DEVICE_SEGCP_PORT			50001	// Search Port (UDP Broadcast / TCP unicast)
+#define DEVICE_SEGCP_PORT			50001	// Search / Setting Port (UDP Broadcast / TCP unicast)
 #define DEVICE_FWUP_PORT			50002	// Firmware Update Port
 #define DEVICE_DDNS_PORT			3030	// Not 	used
 
-/* REMOTE Firmware update */
-// HTTP Request: DEVICE_FWUP_DOMAIN + DEVICE_FWUP_BINPATH
-// FWUP Domain array size / binpath array size depends on FWUP_DOMAIN_SIZE / FWUP_BINPATH_SIZE (ConfigData.h)
-#define FWUP_SERVER_PORT			80
-#define FWUP_SERVER_DOMAIN			"device.wizwiki.net"
-#define FWUP_SERVER_BINPATH			"/w7500s2e/fw/W7500x_S2E_App.bin"
 // HTTP Response: Status code
 #define STATUS_HTTP_OK				200
 
 /* W7500S2E Application flash memory map */
 #define DEVICE_BOOT_SIZE					(28*1024)
-#define DEVICE_APP_SIZE						(50*1024)
+#ifdef __USE_APPBACKUP_AREA__
+	#define DEVICE_APP_SIZE						(50*1024)
+#else
+	#define DEVICE_APP_SIZE						(100*1024)
+#endif
 
 #define DEVICE_BOOT_ADDR					(FLASH_START_ADDR) // Boot: 28kB
 #define	DEVICE_BOOT_BLOCKS					(7)

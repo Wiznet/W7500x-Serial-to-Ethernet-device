@@ -11,6 +11,13 @@
 #define FWUP_DOMAIN_SIZE		30
 #define FWUP_BINPATH_SIZE		40
 
+/* REMOTE Firmware update */
+// HTTP Request: DEVICE_FWUP_DOMAIN + DEVICE_FWUP_BINPATH
+// FWUP Domain array size / binpath array size depends on FWUP_DOMAIN_SIZE / FWUP_BINPATH_SIZE (ConfigData.h)
+#define FWUP_SERVER_PORT			80
+#define FWUP_SERVER_DOMAIN			"device.wizwiki.net"
+#define FWUP_SERVER_BINPATH			"/wiz750sr/fw/W7500x_S2E_App.bin"
+
 struct __network_info_common {
 	uint8_t mac[6];
 	uint8_t local_ip[4];
@@ -40,6 +47,7 @@ struct __network_info {
 } __attribute__((packed));
 
 struct __serial_info {
+	uint8_t uart_interface;		// UART interface; [0] RS-232/TTL, [1] RS-422/485, This value is determined at the initial routine of device.
 	uint8_t baud_rate;			// WIZ107SR: 0 ~ (enum) / WIZ550S2E: baud rate values //uint32_t baud_rate;			// WIZ107SR: 0 ~ (enum) / WIZ550S2E: baud rate values
 	uint8_t data_bits;			// 7, 8, 9
 	uint8_t parity;				// None, Odd, Even
@@ -51,7 +59,7 @@ struct __serial_info {
 } __attribute__((packed));
 
 struct __options {
-	char pw_setting[10];
+	//char pw_setting[10];
 	char pw_connect[10];
 	char pw_search[10];			// ## Eric, Field added for compatibility with WIZ107SR
 	uint8_t pw_connect_en;
@@ -69,6 +77,7 @@ struct __user_io_info {
 	uint16_t user_io_enable;		// 0: Disable / 1: Enable
 	uint16_t user_io_type;			// 0: Digital / 1: Analog
 	uint16_t user_io_direction;		// 0: Input / 1: Output
+	uint16_t user_io_status;		// Digital Output only
 } __attribute__((packed));
 
 // ## Eric, Field added for compatibility with WIZ107SR
@@ -82,14 +91,14 @@ struct __firmware_update_extend {
 	uint8_t fwup_server_flag;
 	uint16_t fwup_server_port;
 	uint8_t fwup_server_use_default;
-	//uint8_t fwup_server_domain[FWUP_DOMAIN_SIZE];
-	//uint8_t fwup_server_binpath[FWUP_BINPATH_SIZE];
+	uint8_t fwup_server_domain[FWUP_DOMAIN_SIZE];
+	uint8_t fwup_server_binpath[FWUP_BINPATH_SIZE];
 } __attribute__((packed));
 
 typedef struct __DevConfig {
 	uint16_t packet_size;
 	uint8_t module_type[3];		// 모듈의 종류별로 코드를 부여하고 이를 사용한다.
-	uint8_t module_name[25];
+	uint8_t module_name[15];
 	uint8_t fw_ver[3];			// 10진수. Major Version . Minor Version . Maintenance Version 버전으로 나뉨
 	struct __network_info_common network_info_common;
 	struct __network_info network_info[1];	// 여러 개 소켓을 사용할 경우 확장

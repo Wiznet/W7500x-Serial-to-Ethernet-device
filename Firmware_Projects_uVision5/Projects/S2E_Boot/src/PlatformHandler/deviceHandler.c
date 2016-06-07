@@ -1,6 +1,7 @@
 
 #include <string.h>
 #include "common.h"
+#include "W7500x_board.h"
 #include "ConfigData.h"
 #include "wizchip_conf.h"
 #include "W7500x_wztoe.h"
@@ -12,6 +13,7 @@
 
 uint16_t get_firmware_from_network(uint8_t sock, uint8_t * buf);
 void reset_fw_update_timer(void);
+
 
 uint8_t enable_fw_update_timer = SEGCP_DISABLE;
 volatile uint16_t fw_update_time = 0;
@@ -53,6 +55,9 @@ void device_reboot(void)
 	while(1);
 }
 
+
+
+#ifdef __USE_APPBACKUP_AREA__ // 50kB App + 50kB App-backup mode
 
 	// if(stype == STORAGE_APP_BACKUP)	>>> Config tool -> STORAGE_APP_BACKUP (App, network to flash update)
 	// if(stype == STORAGE_APP_MAIN) 	>>> STORAGE_APP_BACKUP -> STORAGE_APP_MAIN (Boot, flash to flash update)
@@ -215,6 +220,108 @@ uint8_t device_firmware_update(teDATASTORAGE stype)
 	return ret;
 }
 
+#else // 100kB App mode
+
+uint8_t device_firmware_update(teDATASTORAGE stype)
+{
+	struct __firmware_update *fwupdate = (struct __firmware_update *)&(get_DevConfig_pointer()->firmware_update);
+	struct __serial_info *serial = (struct __serial_info *)&(get_DevConfig_pointer()->serial_info);
+	
+	uint8_t ret = DEVICE_FWUP_RET_PROGRESS; // No Meaning, [Firmware update process] have to work as blocking function.
+	//uint16_t len = 0;
+	uint16_t recv_len = 0;
+	uint16_t write_len = 0;
+	static uint32_t write_fw_len;
+	
+	//teDATASTORAGE src_storage;
+	//uint32_t src_storage_addr, target_storage_addr;
+//#ifdef _FWUP_DEBUG_
+	//uint8_t update_cnt = 0;
+//#endif
+	if(fwupdate->fwup_flag == SEGCP_DISABLE)	return DEVICE_FWUP_RET_FAILED;
+	if((fwupdate->fwup_size == 0) || (fwupdate->fwup_size > DEVICE_FWUP_SIZE))
+	{
+		if(serial->serial_debug_en == SEGCP_ENABLE)
+		{
+			printf(" > SEGCP:FW_UPDATE:FAILED - Invalid firmware size: %d bytes (Firmware size must be within %d bytes)\r\n", fwupdate->fwup_size, DEVICE_FWUP_SIZE);
+		}
+
+		return DEVICE_FWUP_RET_FAILED;
+	}
+	
+	// App, FW update from Network (ethernet) to Flash memory (backup area)
+	if(stype == STORAGE_APP_MAIN)
+	{
+		if(serial->serial_debug_en == SEGCP_ENABLE)
+		{
+			printf(" > SEGCP:FW_UPDATE:NETWORK - Firmware size: [%d] bytes\r\n", fwupdate->fwup_size);
+		}
+
+		write_fw_len = 0;
+		erase_storage(STORAGE_APP_MAIN); // Erase application backup blocks
+		
+		// init firmware update timer
+		enable_fw_update_timer = SEGCP_ENABLE;
+		
+		do 
+		{
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+			recv_len = get_firmware_from_network(SOCK_FWUPDATE, g_recv_buf);
+			
+			if(recv_len > 0)
+			{
+				write_len = write_storage(STORAGE_APP_MAIN, (DEVICE_APP_MAIN_ADDR + write_fw_len), g_recv_buf, recv_len);
+				write_fw_len += write_len;
+				fw_update_time = 0; // Reset fw update timeout counter
+			}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+			
+			// Firmware update failed: Timeout occurred
+			if(flag_fw_update_timeout == SEGCP_ENABLE)
+			{
+				if(serial->serial_debug_en == SEGCP_ENABLE) printf(" > SEGCP:FW_UPDATE:FAILED - Firmware update timeout\r\n");
+				ret = DEVICE_FWUP_RET_FAILED;
+				break;
+			}
+			
+			// Firmware update failed: timeout occurred at get_firmware_from_network() function
+			if(flag_fw_from_network_timeout == SEGCP_ENABLE)
+			{
+				if(serial->serial_debug_en == SEGCP_ENABLE) printf(" > SEGCP:FW_UPDATE:FAILED - Network download timeout\r\n");
+				ret = DEVICE_FWUP_RET_FAILED;
+				break;
+			}
+			
+		} while(write_fw_len < fwupdate->fwup_size);
+	}	
+	else if(stype == NETWORK_APP_BACKUP) // Run this code in the boot area only
+	{
+		printf(" > SEGCP:FW_UPDATE:FAILED - Please try to FW Update at APPBOOT mode\r\n");
+		
+		return DEVICE_FWUP_RET_FAILED;
+	}
+	else
+	{
+		ret = DEVICE_FWUP_RET_FAILED;
+	}
+	
+	// shared code
+	if(write_fw_len == fwupdate->fwup_size)
+	{
+		if(serial->serial_debug_en == SEGCP_ENABLE)
+		{
+			printf(" > SEGCP:FW_UPDATE:SUCCESS - %d / %d bytes\r\n", write_fw_len, fwupdate->fwup_size);
+		}
+		ret = DEVICE_FWUP_RET_SUCCESS;
+	}
+	
+	reset_fw_update_timer();
+	
+	return ret;
+}
+
+#endif
+
 
 uint16_t get_firmware_from_network(uint8_t sock, uint8_t * buf)
 {
@@ -309,7 +416,6 @@ uint16_t get_firmware_from_network(uint8_t sock, uint8_t * buf)
 	
 	return len;
 }
-
 
 // function for timer
 void device_timer_msec(void)

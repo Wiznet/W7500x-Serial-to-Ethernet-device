@@ -28,7 +28,8 @@ void Timer_Configuration(void)
 	DUALTIMER_ClockEnable(DUALTIMER0_0);
 
 	/* Dualtimer 0_0 configuration */
-	Dualtimer_InitStructure.TimerLoad = 0x0000BB80;
+	//Dualtimer_InitStructure.TimerLoad = 0x0000BB80; // 48MHz/1
+	Dualtimer_InitStructure.TimerLoad = GetSystemClock() / 1000;
 	Dualtimer_InitStructure.TimerControl_Mode = DUALTIMER_TimerControl_Periodic;
 	Dualtimer_InitStructure.TimerControl_OneShot = DUALTIMER_TimerControl_Wrapping;
 	Dualtimer_InitStructure.TimerControl_Pre = DUALTIMER_TimerControl_Pre_1;

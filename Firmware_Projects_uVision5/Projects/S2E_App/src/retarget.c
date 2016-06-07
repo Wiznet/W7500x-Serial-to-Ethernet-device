@@ -1,6 +1,6 @@
 /**
   ******************************************************************************
-  * @file    /ADC/Illumination_RGBLED/retarget.c 
+  * @file    retarget.c 
   * @author  IOP Team
   * @version V1.0.0
   * @date    01-May-2015
@@ -21,10 +21,12 @@
 
 #include <stdio.h>
 #include "W7500x_uart.h"
-#include "common.h"
+//#include "common.h"
+//#include "uart_cb.h" // << UART selector
 
+
+// Replaced the defines for UART Selector to Callback functions.
 #define USING_UART2
-
 #if defined (USING_UART0)
 	#define UART_SEND_BYTE(ch)  UartPutc(UART0,ch)
 	#define UART_RECV_BYTE()    UartGetc(UART0)
@@ -35,6 +37,8 @@
 	#define UART_SEND_BYTE(ch)  S_UartPutc(ch)
 	#define UART_RECV_BYTE()    S_UartGetc()
 #endif
+
+
 
 
 #if defined ( __CC_ARM   )

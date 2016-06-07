@@ -2,7 +2,7 @@
 #define __FLASHHANDLER_H__
 
 #include <stdint.h>
-//#define _FLASH_DEBUG_
+#define _FLASH_DEBUG_
 
 /* W7500 IAP IDs */
 #define IAP_ENTRY			(0x1FFF1001) // Because Thum code

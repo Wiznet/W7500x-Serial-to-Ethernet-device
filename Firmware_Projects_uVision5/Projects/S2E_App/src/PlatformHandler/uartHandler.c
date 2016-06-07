@@ -1,5 +1,6 @@
 #include <string.h>
 #include "W7500x_uart.h"
+#include "W7500x_gpio.h"
 #include "common.h"
 #include "W7500x_board.h"
 #include "configdata.h"
@@ -13,6 +14,7 @@
 /* Private define ------------------------------------------------------------*/
 
 /* Private functions prototypes ----------------------------------------------*/
+extern void delay(__IO uint32_t nCount);
 
 /* Private functions ---------------------------------------------------------*/
 int32_t uart_putc(uint8_t uartNum, uint8_t ch);
@@ -40,20 +42,18 @@ BUFFER_DEFINITION(data_rx, SEG_DATA_BUF_SIZE);
 	IRQn_Type 			UART_data_irq = UART1_IRQn;
 #endif
 
-uint32_t baud_table[14] = {
-	300, 600, 1200, 1800, 2400, 4800, 9600,
-	14400, 19200, 28800, 38400, 57600, 115200, 230400
-};
+//uint32_t baud_table[] = {300, 600, 1200, 1800, 2400, 4800, 9600, 14400, 19200, 28800, 38400, 57600, 115200, 230400};
 uint8_t word_len_table[] = {7, 8, 9};
-uint8_t * parity_table[] = {"N", "ODD", "EVEN"};
+uint8_t * parity_table[] = {(uint8_t *)"N", (uint8_t *)"ODD", (uint8_t *)"EVEN"};
 uint8_t stop_bit_table[] = {1, 2};
-uint8_t * flow_ctrl_table[] = {"NONE", "XON/XOFF", "RTS/CTS", "RS422", "RS485"};
-
-// 1-byte character variable for UART Interrupt request handler
-static uint8_t ch;
+uint8_t * flow_ctrl_table[] = {(uint8_t *)"NONE", (uint8_t *)"XON/XOFF", (uint8_t *)"RTS/CTS"};
+uint8_t * uart_if_table[] = {(uint8_t *)UART_IF_STR_RS232_TTL, (uint8_t *)UART_IF_STR_RS422_485};
 
 // XON/XOFF Status; 
 static uint8_t xonoff_status = UART_XON;
+
+// UART Interface selecter; RS-422 or RS-485 use only
+static uint8_t uart_if_mode = UART_IF_RS422;
 
 /* Public functions ----------------------------------------------------------*/
 
@@ -65,21 +65,55 @@ static uint8_t xonoff_status = UART_XON;
 
 void S2E_UART_IRQ_Handler(UART_TypeDef * s2e_uart)
 {
+	uint8_t ch; // 1-byte character variable for UART Interrupt request handler
+	struct __serial_info *serial = (struct __serial_info *)get_DevConfig_pointer()->serial_info;
+	
 	if(UART_GetITStatus(s2e_uart,  UART_IT_FLAG_RXI))
 	{
 		if(IS_BUFFER_FULL(data_rx))
 		{
-			UartGetc(s2e_uart);
+			//UartGetc(s2e_uart);
+			UART_ReceiveData(s2e_uart);
+			
 			flag_ringbuf_full = 1;
-			//BUFFER_CLEAR(data_rx); // buffer full (or 3/4) 일 때 1. flush / 2. wait - 어떤 방법이 가장 좋은가
+			
+			// buffer full => Serial data discard
+			//BUFFER_CLEAR(data_rx); // Data-UART buffer flush -> Does not use
 		}
 		else
 		{
-			ch = UartGetc(s2e_uart); // ch = UART_ReceiveData(s2e_uart);
+			if((serial->flow_control == flow_rts_cts) && (BUFFER_USED_SIZE(data_rx) > UART_OFF_THRESHOLD)) // CTS/RTS
+			{
+				; // Does nothing => RTS signal inactive
+			}
+			else
+			{
+				//ch = UartGetc(s2e_uart);
+				ch = UART_ReceiveData(s2e_uart);
+				
+#ifdef _SEG_DEBUG_
+				UART_SendData(s2e_uart, ch);	// ## UART echo; for debugging
+#endif
+				if(!(check_modeswitch_trigger(ch))) // ret: [0] data / [!0] trigger code
+				{
+					if(check_serial_store_permitted(ch)) // ret: [0] not permitted / [1] permitted
+					{
+						BUFFER_IN(data_rx) = ch;
+						BUFFER_IN_MOVE(data_rx, 1);
+					}
+				}
+			}
+		}
+		init_time_delimiter_timer();
+
+/*		else
+		{
+			//ch = UartGetc(s2e_uart);
+			ch = UART_ReceiveData(s2e_uart);
 			
-	#ifdef _SEG_DEBUG_
+#ifdef _SEG_DEBUG_
 			UART_SendData(s2e_uart, ch);	// ## UART echo; for debugging
-	#endif
+#endif
 			if(!(check_modeswitch_trigger(ch))) // ret: [0] data / [!0] trigger code
 			{
 				if(check_serial_store_permitted(ch)) // ret: [0] not permitted / [1] permitted
@@ -89,15 +123,18 @@ void S2E_UART_IRQ_Handler(UART_TypeDef * s2e_uart)
 				}
 			}
 		}
-		
 		init_time_delimiter_timer();
+*/
+		
 		UART_ClearITPendingBit(s2e_uart, UART_IT_FLAG_RXI);
 	}
-
+/*
+	// Does not use: UART Tx interrupt
 	if(UART_GetITStatus(s2e_uart, UART_IT_FLAG_TXI)) 
 	{
 		UART_ClearITPendingBit(s2e_uart, UART_IT_FLAG_TXI);
 	}
+*/
 }
 
 void S2E_UART_Configuration(void)
@@ -140,6 +177,7 @@ void serial_info_init(UART_TypeDef *pUART, struct __serial_info *serial)
 {
 	UART_InitTypeDef UART_InitStructure;
 	uint32_t valid_arg = 0;
+	uint32_t baud_table[] = {300, 600, 1200, 1800, 2400, 4800, 9600, 14400, 19200, 28800, 38400, 57600, 115200, 230400};
 
 	/* Set Baud Rate */
 	if(serial->baud_rate < (sizeof(baud_table) / sizeof(baud_table[0])))
@@ -197,41 +235,47 @@ void serial_info_init(UART_TypeDef *pUART, struct __serial_info *serial)
 	}
 	
 	/* Flow Control */
-	switch(serial->flow_control) {
-	case flow_none:
-		UART_InitStructure.UART_HardwareFlowControl = UART_HardwareFlowControl_None;
-		break;
-	case flow_rts_cts:
-		UART_InitStructure.UART_HardwareFlowControl = UART_HardwareFlowControl_RTS_CTS;
-		break;
-	case flow_xon_xoff:
-		UART_InitStructure.UART_HardwareFlowControl = UART_HardwareFlowControl_None;
-		break;
-	case flow_rs422:
-		UART_InitStructure.UART_HardwareFlowControl = UART_HardwareFlowControl_None;
-		break;
-	case flow_rs485:
-		UART_InitStructure.UART_HardwareFlowControl = UART_HardwareFlowControl_None;
-		break;
-	default:
-		UART_InitStructure.UART_HardwareFlowControl = UART_HardwareFlowControl_None;
-		break;
+	if(serial->uart_interface == UART_IF_RS232_TTL)
+	{
+		// RS232 Hardware Flow Control
+		//7		RTS		Request To Send		Output
+		//8		CTS		Clear To Send		Input
+		switch(serial->flow_control) {
+			case flow_none:
+				UART_InitStructure.UART_HardwareFlowControl = UART_HardwareFlowControl_None;
+				break;
+			case flow_rts_cts:
+				UART_InitStructure.UART_HardwareFlowControl = UART_HardwareFlowControl_RTS_CTS;
+				break;
+			case flow_xon_xoff:
+				UART_InitStructure.UART_HardwareFlowControl = UART_HardwareFlowControl_None;
+				break;
+			default:
+				UART_InitStructure.UART_HardwareFlowControl = UART_HardwareFlowControl_None;
+				break;
+		}
 	}
-
-	// RS232 Hardware Flow Control
-	//7		RTS		Request To Send		Output
-	//8		CTS		Clear To Send		Input
+	else // UART_IF_RS422_485
+	{
+		UART_InitStructure.UART_HardwareFlowControl = UART_HardwareFlowControl_None;
+		
+		// GPIO configration (RTS pin -> GPIO: 485SEL)
+		get_uart_rs485_sel(SEG_DATA_UART);
+		uart_rs485_rs422_init(SEG_DATA_UART);
+		//printf("UART Interface: %s mode\r\n", uart_if_mode?"RS-485":"RS-422");
+	}
 	
 	/* Configure the UARTx */
 	UART_InitStructure.UART_Mode = UART_Mode_Rx | UART_Mode_Tx;
 	UART_Init(pUART, &UART_InitStructure);
 }
 
+
 void check_uart_flow_control(uint8_t flow_ctrl)
 {
 	if(flow_ctrl == flow_xon_xoff)
 	{
-		if((xonoff_status == UART_XON) && (BUFFER_USED_SIZE(data_rx) > UART_XOFF_THRESHOLD)) // Send the transmit stop command to peer - go XOFF
+		if((xonoff_status == UART_XON) && (BUFFER_USED_SIZE(data_rx) > UART_OFF_THRESHOLD)) // Send the transmit stop command to peer - go XOFF
 		{
 			UartPutc(UART_data, UART_XOFF);
 			xonoff_status = UART_XOFF;
@@ -239,7 +283,7 @@ void check_uart_flow_control(uint8_t flow_ctrl)
 			printf(" >> SEND XOFF [%d]\r\n", BUFFER_USED_SIZE(data_rx));
 #endif
 		}
-		else if((xonoff_status == UART_XOFF) && (BUFFER_USED_SIZE(data_rx) < UART_XON_THRESHOLD)) // Send the transmit start command to peer. -go XON
+		else if((xonoff_status == UART_XOFF) && (BUFFER_USED_SIZE(data_rx) < UART_ON_THRESHOLD)) // Send the transmit start command to peer. -go XON
 		{
 			UartPutc(UART_data, UART_XON);
 			xonoff_status = UART_XON;
@@ -256,9 +300,33 @@ void check_uart_flow_control(uint8_t flow_ctrl)
 
 int32_t uart_putc(uint8_t uartNum, uint8_t ch)
 {
+	DevConfig *value = get_DevConfig_pointer();
+	
 	if(uartNum == SEG_DATA_UART)
 	{
-		UartPutc(UART_data, ch); // 원 함수 / 지연의 원인. UART busy - 해결 방안 고민해보기. tx도 ringbuf 처리?
+		UartPutc(UART_data, ch); 
+/*
+		if(value->serial_info[0].uart_interface == UART_IF_RS422_485)
+		{
+			// RTS pin -> High
+			if(SEG_DATA_UART == 0) // UART0
+				GPIO_SetBits(UART0_RTS_PORT, UART0_RTS_PIN);
+			else if(SEG_DATA_UART == 1) // UART1
+				GPIO_SetBits(UART1_RTS_PORT, UART1_RTS_PIN);
+			
+			UartPutc(UART_data, ch);
+			
+			// RTS pin -> Low
+			if(SEG_DATA_UART == 0) // UART0
+				GPIO_ResetBits(UART0_RTS_PORT, UART0_RTS_PIN);
+			else if(SEG_DATA_UART == 1) // UART1
+				GPIO_ResetBits(UART1_RTS_PORT, UART1_RTS_PIN);
+		}
+		else // UART_IF_RS232_TTL
+		{
+			UartPutc(UART_data, ch); // 원 함수 / 지연의 원인. UART busy - 해결 방안 고민해보기. tx도 ringbuf 처리?
+		}
+*/
 	}
 	else if(uartNum == SEG_DEBUG_UART)
 	{
@@ -363,3 +431,93 @@ void uart_rx_flush(uint8_t uartNum)
 		BUFFER_CLEAR(data_rx);
 	}
 }
+
+uint8_t get_uart_rs485_sel(uint8_t uartNum)
+{
+	if(uartNum == 0) // UART0
+	{
+		GPIO_Configuration(UART0_RTS_PORT, UART0_RTS_PIN, GPIO_Mode_IN, UART0_RTS_PAD_AF); // UART0 RTS pin: GPIO / Input
+		GPIO_SetBits(UART0_RTS_PORT, UART0_RTS_PIN); 
+		
+		if(GPIO_ReadInputDataBit(UART0_RTS_PORT, UART0_RTS_PIN) == UART_IF_RS422)
+		{
+			uart_if_mode = UART_IF_RS422;
+		}
+		else
+		{
+			uart_if_mode = UART_IF_RS485;
+		}
+	}
+	else
+	{
+		GPIO_Configuration(UART1_RTS_PORT, UART1_RTS_PIN, GPIO_Mode_IN, UART1_RTS_PAD_AF); // UART1 RTS pin: GPIO / Input
+		GPIO_SetBits(UART1_RTS_PORT, UART1_RTS_PIN); 
+		
+		if(GPIO_ReadInputDataBit(UART1_RTS_PORT, UART1_RTS_PIN) == UART_IF_RS422) // RS-485
+		{
+			uart_if_mode = UART_IF_RS422;
+		}
+		else
+		{
+			uart_if_mode = UART_IF_RS485;
+		}
+	}
+	
+	return uart_if_mode;
+}
+
+
+void uart_rs485_rs422_init(uint8_t uartNum)
+{
+	if(uartNum == 0) // UART0
+	{
+		GPIO_Configuration(UART0_RTS_PORT, UART0_RTS_PIN, GPIO_Mode_OUT, UART0_RTS_PAD_AF); // UART0 RTS pin: GPIO / Output
+		GPIO_ResetBits(UART0_RTS_PORT, UART0_RTS_PIN); // UART0 RTS pin init, Set the signal low
+	}
+	else if(uartNum == 1) // UART1
+	{
+		GPIO_Configuration(UART1_RTS_PORT, UART1_RTS_PIN, GPIO_Mode_OUT, UART1_RTS_PAD_AF); // UART1 RTS pin: GPIO / Output
+		GPIO_ResetBits(UART1_RTS_PORT, UART1_RTS_PIN); // UART1 RTS pin init, Set the signal low
+	}
+}
+
+
+void uart_rs485_enable(uint8_t uartNum)
+{
+	if(uart_if_mode == UART_IF_RS485)
+	{
+		// RTS pin -> High
+		if(uartNum == 0) // UART0
+		{
+			GPIO_SetBits(UART0_RTS_PORT, UART0_RTS_PIN);
+		}
+		else if(uartNum == 1) // UART1
+		{
+			GPIO_SetBits(UART1_RTS_PORT, UART1_RTS_PIN);
+		}
+		delay(1);
+	}
+	
+	//UART_IF_RS422: None
+}
+
+
+void uart_rs485_disable(uint8_t uartNum)
+{
+	if(uart_if_mode == UART_IF_RS485)
+	{
+		// RTS pin -> Low
+		if(uartNum == 0) // UART0
+		{
+			GPIO_ResetBits(UART0_RTS_PORT, UART0_RTS_PIN);
+		}
+		else if(uartNum == 1) // UART1
+		{
+			GPIO_ResetBits(UART1_RTS_PORT, UART1_RTS_PIN);
+		}
+		delay(1);
+	}
+	
+	//UART_IF_RS422: None
+}
+

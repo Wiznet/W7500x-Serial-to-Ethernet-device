@@ -52,8 +52,11 @@ void do_segcp(void)
 	uint16_t segcp_ret = 0;
 	
 	segcp_ret  = proc_SEGCP_udp(gSEGCPREQ, gSEGCPREP);
+	
+#if 0
 	segcp_ret |= proc_SEGCP_tcp(gSEGCPREQ, gSEGCPREP);
-
+#endif
+	
 	if(segcp_ret & SEGCP_RET_ERR)
 	{
 		if(dev_config->serial_info[0].serial_debug_en == SEGCP_ENABLE) printf(" > SEGCP:ERROR:%04X\r\n", segcp_ret);
@@ -93,11 +96,23 @@ void do_segcp(void)
 	
 		if (segcp_ret & SEGCP_RET_FWUP)
 		{
+#ifdef __USE_APPBACKUP_AREA__
 			if(device_firmware_update(NETWORK_APP_BACKUP) == DEVICE_FWUP_RET_SUCCESS)
 			{
 				save_DevConfig_to_storage();
 				device_reboot();
 			}
+#else
+			if(device_firmware_update(STORAGE_APP_MAIN) == DEVICE_FWUP_RET_SUCCESS)
+			{
+				dev_config->firmware_update.fwup_flag = SEGCP_DISABLE;
+				dev_config->firmware_update.fwup_size = 0;
+				
+				save_DevConfig_to_storage();
+				device_reboot();
+			}
+#endif
+			
 			//else
 			//{
 			//	;
@@ -190,7 +205,8 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 	uint16_t ret = 0;
 	uint8_t  cmdnum = 0;
 	uint8_t* treq;
-	uint8_t* trep = segcp_rep;
+	//uint8_t* trep = segcp_rep;
+	char* trep = segcp_rep;
 	uint16_t param_len = 0;
 	
 	uint8_t  tmp_byte = 0;
@@ -363,7 +379,10 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						if(gSEGCPPRIVILEGE & (SEGCP_PRIVILEGE_SET|SEGCP_PRIVILEGE_WRITE)) ret |= SEGCP_RET_REBOOT;
 						else ret |= SEGCP_RET_ERR_NOPRIVILEGE;
 						break;
-					case SEGCP_UN: sprintf(trep, "%d", DEVICE_UART_CNT);
+					case SEGCP_UN:
+						// NEW: UART Interface - TTL/RS-232 or RS-422/485
+						sprintf(trep, "%s", uart_if_table[dev_config->serial_info[0].uart_interface]); 
+						//sprintf(trep, "%d", DEVICE_UART_CNT); // OLD: UART COUNT
 						break;
 					case SEGCP_ST: sprintf(trep, "%s", strDEVSTATUS[dev_config->network_info[0].state]);
 						break;
@@ -403,7 +422,7 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 				{
 					case SEGCP_MC:
 						if((dev_config->network_info_common.mac[0] == 0x00) && (dev_config->network_info_common.mac[1] == 0x08) && (dev_config->network_info_common.mac[2] == 0xDC)) ret |= SEGCP_RET_ERR_IGNORED;
-						else if(!is_macaddr(param, ".:-", dev_config->network_info_common.mac)) ret |= SEGCP_RET_ERR_INVALIDPARAM;			
+						else if(!is_macaddr(param, ".:-", dev_config->network_info_common.mac)) ret |= SEGCP_RET_ERR_INVALIDPARAM;
 						break;
 					case SEGCP_VR: 
 					case SEGCP_MN:
@@ -422,7 +441,7 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						}
 						else
 						{
-							close(SEG_SOCK);
+							//close(SEG_SOCK);
 							dev_config->network_info[0].working_mode = tmp_byte;
 						}
 						break;
@@ -620,8 +639,21 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						break;
 					case SEGCP_FL:
 						tmp_byte = is_hex(*param);
-						if(param_len != 1 || tmp_byte > flow_rts_cts) ret |= SEGCP_RET_ERR_INVALIDPARAM; // ## RS422/485 will be added
-						else dev_config->serial_info[0].flow_control = tmp_byte;
+						if(param_len != 1 || tmp_byte > flow_rts_cts)
+						{
+							ret |= SEGCP_RET_ERR_INVALIDPARAM;
+						}
+						else
+						{
+							if(dev_config->serial_info[0].uart_interface == UART_IF_RS422_485)
+							{
+								dev_config->serial_info[0].flow_control = flow_none;
+							}
+							else
+							{
+								dev_config->serial_info[0].flow_control = tmp_byte;
+							}
+						}
 						break;
 					case SEGCP_IT:
 						sscanf(param, "%ld", &tmp_long);
@@ -645,12 +677,15 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						}
 						else
 						{
-							sscanf(param,"%x", &dev_config->network_info[0].packing_delimiter[0]);
+							sscanf(param,"%x", &tmp_int);
+							dev_config->network_info[0].packing_delimiter[0] = (uint8_t)tmp_int;
+							
 							if(dev_config->network_info[0].packing_delimiter[0] == 0x00) 
 								dev_config->network_info[0].packing_delimiter_length = 0;
 							else 
 								dev_config->network_info[0].packing_delimiter_length = 1;
 						}
+						
 						break;
 					case SEGCP_TE:
 						tmp_byte = is_hex(*param);
@@ -660,7 +695,7 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 					case SEGCP_SS:
 						if(param_len != 6 || !is_hexstr(param) || !str_to_hex(param, dev_config->options.serial_trigger))
 						{
-							printf(">> SEGCP_SS = %.2X %.2X %.2X", dev_config->options.serial_trigger[0], dev_config->options.serial_trigger[1], dev_config->options.serial_trigger[2]);
+							//printf(">> SEGCP_SS = %.2X %.2X %.2X", dev_config->options.serial_trigger[0], dev_config->options.serial_trigger[1], dev_config->options.serial_trigger[2]);
 							ret |= SEGCP_RET_ERR_INVALIDPARAM;
 						}
 						break;
@@ -688,7 +723,11 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						break;
 					case SEGCP_FW:
 						sscanf(param, "%ld", &tmp_long);
-						if(tmp_long > (((uint32_t)DEVICE_FWUP_SIZE) & 0x0FFFF))
+#ifdef __USE_APPBACKUP_AREA__
+						if(tmp_long > (((uint32_t)DEVICE_FWUP_SIZE) & 0x0FFFF)) // 64KByte
+#else
+						if(tmp_long > (((uint32_t)DEVICE_FWUP_SIZE) & 0x19000)) // 100KByte
+#endif
 						{
 							dev_config->firmware_update.fwup_size = 0;
 							ret |= SEGCP_RET_ERR_INVALIDPARAM;
@@ -698,13 +737,17 @@ uint16_t proc_SEGCP(uint8_t* segcp_req, uint8_t* segcp_rep)
 						}
 						else
 						{
+#ifdef __USE_APPBACKUP_AREA__
 							dev_config->firmware_update.fwup_size = (uint16_t)tmp_long;
+#else
+							dev_config->firmware_update.fwup_size = tmp_long;
+#endif
 							dev_config->firmware_update.fwup_flag = SEGCP_ENABLE;
 							ret |= SEGCP_RET_FWUP;
 							sprintf(trep,"FW%d.%d.%d.%d:%d:%d\r\n", dev_config->network_info_common.local_ip[0], dev_config->network_info_common.local_ip[1]
 							,dev_config->network_info_common.local_ip[2] , dev_config->network_info_common.local_ip[3], (uint16_t)DEVICE_FWUP_PORT);
 							
-							close(SEG_SOCK);
+							//close(SEG_SOCK);
 #ifdef _SEGCP_DEBUG_
 							printf("SEGCP_FW:OK\r\n");
 #endif
@@ -845,6 +888,7 @@ uint16_t proc_SEGCP_udp(uint8_t* segcp_req, uint8_t* segcp_rep)
 	return ret;
 }
 
+#if 0
 
 uint16_t proc_SEGCP_tcp(uint8_t* segcp_req, uint8_t* segcp_rep)
 {
@@ -852,7 +896,7 @@ uint16_t proc_SEGCP_tcp(uint8_t* segcp_req, uint8_t* segcp_rep)
 	
 	uint16_t ret = 0;
 	uint16_t len = 0;
-	uint16_t i = 0;
+//	uint16_t i = 0;
 	uint8_t tpar[SEGCP_PARAM_MAX+1];
 	uint8_t * treq;
 	uint8_t * trep;
@@ -959,6 +1003,8 @@ void send_keepalive_packet_configtool(uint8_t sock)
 	printf("SOCKET[%x]: SEND KEEP-ALIVE PACKET\r\n", sock);
 #endif 
 }
+
+#endif
 
 void segcp_timer_msec(void)
 {

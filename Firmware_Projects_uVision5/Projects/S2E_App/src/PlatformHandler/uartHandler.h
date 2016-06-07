@@ -5,7 +5,7 @@
 #include "W7500x_uart.h"
 #include "common.h"
 #include "ConfigData.h"
-#include "seg.h"
+//#include "seg.h"
 
 //#define _UART_DEBUG_
 
@@ -16,8 +16,40 @@
 // XON/XOFF: Transmitter On / Off, Software flow control
 #define UART_XON				0x11 // 17
 #define UART_XOFF				0x13 // 19
-#define UART_XON_THRESHOLD	(uint16_t)(SEG_DATA_BUF_SIZE / 10)
-#define UART_XOFF_THRESHOLD	(uint16_t)(SEG_DATA_BUF_SIZE - UART_XON_THRESHOLD)
+#define UART_ON_THRESHOLD	(uint16_t)(SEG_DATA_BUF_SIZE / 10)
+#define UART_OFF_THRESHOLD	(uint16_t)(SEG_DATA_BUF_SIZE - UART_ON_THRESHOLD)
+
+// UART interface selector, RS-232/TTL or RS-422/485
+#define UART_IF_RS232_TTL			0
+#define UART_IF_RS422_485			1
+#define UART_IF_STR_RS232_TTL		"RS-232/TTL"
+#define UART_IF_STR_RS422_485		"RS-422/485"
+
+#define UART_IF_RS422				0
+#define UART_IF_RS485				1
+
+// If the define '__USE_UART_IF_SELECTOR__' disabled, default UART interface is selected to be 'UART_IF_DEFAULT'
+#define UART_IF_DEFAULT				UART_IF_RS232_TTL
+//#define UART_IF_DEFAULT				UART_IF_RS422_485
+
+// UART RTS/CTS pins for RS-422/485 interface handling (Using as GPIO)
+// RTS: output, CTS: input
+// UART0
+#define UART0_RTS_PIN				GPIO_Pin_12
+#define UART0_RTS_PORT				GPIOA
+#define UART0_RTS_PAD_AF			PAD_AF1 // 2nd function, GPIO
+// UART1
+#define UART1_RTS_PIN				GPIO_Pin_1
+#define UART1_RTS_PORT				GPIOC
+#define UART1_RTS_PAD_AF			PAD_AF1 // 2nd function, GPIO
+// Not used
+//#define UART0_CTS_PIN				GPIO_Pin_11
+//#define UART0_CTS_PORT				GPIOA
+//#define UART0_CTS_PAD_AF			PAD_AF1 // 2nd function, GPIO
+//#define UART1_CTS_PIN				GPIO_Pin_7
+//#define UART1_CTS_PORT				GPIOA
+//#define UART1_CTS_PAD_AF			PAD_AF1 // 2nd function, GPIO
+
 
 enum baud {
 	baud_300 = 0,
@@ -56,18 +88,29 @@ enum parity {
 enum flow_ctrl {
 	flow_none = 0,
 	flow_xon_xoff = 1,
+	flow_rts_cts = 2
+};
+
+
+/*
+// old
+enum flow_ctrl {
+	flow_none = 0,
+	flow_xon_xoff = 1,
 	flow_rts_cts = 2,
 	flow_rs422 = 3,
 	flow_rs485 = 4
 };
+*/
 
 extern uint8_t flag_ringbuf_full;
 
-extern uint32_t baud_table[14];
+//extern uint32_t baud_table[]; // 14
 extern uint8_t word_len_table[];
 extern uint8_t stop_bit_table[];
 extern uint8_t * parity_table[];
 extern uint8_t * flow_ctrl_table[];
+extern uint8_t * uart_if_table[];
 
 void S2E_UART_IRQ_Handler(UART_TypeDef * s2e_uart);
 void S2E_UART_Configuration(void);
@@ -92,6 +135,11 @@ int32_t uart_puts(uint8_t uartNum, uint8_t* buf, uint16_t reqSize);
 int32_t uart_gets(uint8_t uartNum, uint8_t* buf, uint16_t reqSize);
 
 void uart_rx_flush(uint8_t uartNum);
+
+uint8_t get_uart_rs485_sel(uint8_t uartNum);
+void uart_rs485_rs422_init(uint8_t uartNum);
+void uart_rs485_disable(uint8_t uartNum);
+void uart_rs485_enable(uint8_t uartNum);
 
 #define MIN(_a, _b) (_a < _b) ? _a : _b
 #define MEM_FREE(mem_p) do{ if(mem_p) { free(mem_p); mem_p = NULL; } }while(0)	//

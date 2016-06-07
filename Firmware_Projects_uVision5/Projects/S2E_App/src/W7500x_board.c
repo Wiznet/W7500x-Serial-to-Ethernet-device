@@ -4,7 +4,13 @@
 
 #include "common.h"
 #include "W7500x_board.h"
+
 #include "timerHandler.h"
+#include "uartHandler.h"
+
+#ifdef __USE_EXT_EEPROM__
+	#include "eepromHandler.h"
+#endif
 
 static void PHY_Init(void);
 
@@ -16,7 +22,7 @@ PAD_AF_TypeDef LED_PAD_AF[LEDn] = {LED1_GPIO_PAD_AF, LED2_GPIO_PAD_AF};
 volatile uint16_t phylink_check_time_msec = 0;
 uint8_t flag_check_phylink = 0;
 uint8_t flag_hw_trig_enable = 0;
-	
+
 /* W7500x Board Initialization */
 void W7500x_Board_Init(void)
 {
@@ -32,10 +38,23 @@ void W7500x_Board_Init(void)
 	init_phylink_in_pin();
 #endif
 	
+#ifdef __USE_EXT_EEPROM__
+	init_eeprom();
+#endif
+	
+#ifdef __USE_BOOT_ENTRY__
+	init_boot_entry_pin();
+#endif
 	// STATUS #1 : PHY link status (LED1)
 	// STATUS #2 : TCP connection status (LED2)
 	LED_Init(LED1);
 	LED_Init(LED2);
+}
+
+void Supervisory_IC_Init(void)
+{
+	*(volatile uint32_t *)(0x41001170) = 0x0002; // 8MHz output (125n)
+	*(volatile uint32_t *)(0x41002008) = 0x0002; // PAD PA_02 use as CLKOUT
 }
 
 static void PHY_Init(void)
@@ -75,17 +94,17 @@ void init_phylink_in_pin(void)
 }
 
 
-// Hardware mode switch pin, active low
-void init_hw_trig_pin(void)
-{
-	GPIO_Configuration(HW_TRIG_PORT, HW_TRIG_PIN, GPIO_Mode_IN, HW_TRIG_PAD_AF);
-}
-
-
 uint8_t get_phylink_in_pin(void)
 {
 	// PHYlink input; Active low
 	return GPIO_ReadInputDataBit(PHYLINK_IN_PORT, PHYLINK_IN_PIN);
+}
+
+// Hardware mode switch pin, active low
+void init_hw_trig_pin(void)
+{
+	GPIO_Configuration(HW_TRIG_PORT, HW_TRIG_PIN, GPIO_Mode_IN, HW_TRIG_PAD_AF);
+	HW_TRIG_PORT->OUTENCLR = HW_TRIG_PIN;
 }
 
 
@@ -96,11 +115,47 @@ uint8_t get_hw_trig_pin(void)
 }
 
 
+void init_uart_if_sel_pin(void)
+{
+	#ifdef __USE_UART_IF_SELECTOR__
+		GPIO_Configuration(UART_IF_SEL_PORT, UART_IF_SEL_PIN, GPIO_Mode_IN, UART_IF_SEL_PAD_AF);
+	#else
+		;
+	#endif
+}
+
+uint8_t get_uart_if_sel_pin(void)
+{
+	// Status of UART interface selector pin input; [0] RS-232/TTL mode, [1] RS-422/485 mode
+	#ifdef __USE_UART_IF_SELECTOR__
+		return GPIO_ReadInputDataBit(UART_IF_SEL_PORT, UART_IF_SEL_PIN);
+	#else
+		return UART_IF_DEFAULT;
+	#endif
+}
+
+
+#ifdef __USE_BOOT_ENTRY__
+// Application boot mode entry pin, active low
+void init_boot_entry_pin(void)
+{
+	GPIO_Configuration(BOOT_ENTRY_PORT, BOOT_ENTRY_PIN, GPIO_Mode_IN, BOOT_ENTRY_PAD_AF);
+	BOOT_ENTRY_PORT->OUTENCLR = BOOT_ENTRY_PIN; // set to high
+}
+
+uint8_t get_boot_entry_pin(void)
+{
+	// Get the status of application boot mode entry pin, active low
+	return GPIO_ReadInputDataBit(BOOT_ENTRY_PORT, BOOT_ENTRY_PIN);
+}
+#endif
+
+
 /**
   * @brief  Configures LED GPIO.
   * @param  Led: Specifies the Led to be configured.
   *   This parameter can be one of following parameters:
-  *     @arg WIZWIKI-W7500 board: LED_R / LED_G / LED_B
+  *     @arg WIZWIKI-W7500 board: LED1(LED_R) / LED2(LED_G) / Not used(LED_B)
   *     @arg WIZWIKI-W7500ECO board: LED1 / LED2
   * @retval None
   */

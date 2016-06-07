@@ -11,29 +11,43 @@
 #include "common.h"
 
 ////////////////////////////////
-// Product Configurations	  //
+// Product Configurations     //
 ////////////////////////////////
-/* Board Name */
+
+/* Target Board Selector */
 #define DEVICE_BOARD_NAME	WIZwiki_W7500ECO
 //#define DEVICE_BOARD_NAME	WIZ750SR
 
 #ifdef DEVICE_BOARD_NAME
 	#if (DEVICE_BOARD_NAME == WIZ750SR)
 		#define __W7500P__
-		#define DEVICE_ID_DEFAULT	"WIZ750SR" // W7500P Devices
-	#else 
-		#define DEVICE_ID_DEFAULT	"W7500-S2E" // WIZwiki_W7500 or WIZwiki_W7500ECO Board
+		#define __USE_UART_IF_SELECTOR__	// RS-232/TTL or RS-422/485 selector using UART IF selector pin
+		#define __USE_EXT_EEPROM__			// External EEPROM or Internal Data flash (DAT0/1)
+		#define __USE_BOOT_ENTRY__			// Application boot mode entry pin activated
+		#define __USE_APPBACKUP_AREA__	// If this option activated, Application firmware area is consists of App (50kB) and App backup (50kB). If not, user's application can be 100kB size. (Does not use the backup area)
+		#define DEVICE_CLOCK_SELECT	         CLOCK_SOURCE_EXTERNAL
+		#define DEVICE_PLL_SOURCE_CLOCK      PLL_SOURCE_12MHz
+		#define DEVICE_TARGET_SYSTEM_CLOCK   SYSTEM_CLOCK_48MHz
+		#define DEVICE_ID_DEFAULT            "WIZ750SR" // Device name
+	#else
+		//#define __USE_UART_IF_SELECTOR__
+		//#define __USE_EXT_EEPROM__
+		#define __USE_APPBACKUP_AREA__
+		#define DEVICE_CLOCK_SELECT	         CLOCK_SOURCE_EXTERNAL
+		#define DEVICE_PLL_SOURCE_CLOCK      PLL_SOURCE_8MHz
+		#define DEVICE_TARGET_SYSTEM_CLOCK   SYSTEM_CLOCK_48MHz
+		#define DEVICE_ID_DEFAULT            "W7500-S2E" // Device name: WIZwiki_W7500 or WIZwiki_W7500ECO Board
 	#endif
 #else
-	#define DEVICE_BOARD_NAME	UNKNOWN_DEVICE
-	#define DEVICE_ID_DEFAULT	"UNKNOWN"
+	#define __USE_APPBACKUP_AREA__
+	#define DEVICE_CLOCK_SELECT	             CLOCK_SOURCE_INTERNAL
+	#define DEVICE_PLL_SOURCE_CLOCK          PLL_SOURCE_8MHz
+	#define DEVICE_TARGET_SYSTEM_CLOCK       SYSTEM_CLOCK_48MHz
+	#define DEVICE_BOARD_NAME                UNKNOWN_DEVICE
+	#define DEVICE_ID_DEFAULT                "UNKNOWN"
 #endif
 
-#define DEVICE_UART_CNT		1
-
-/* Configuration Storage Selector */
-// => Defalut: Internal Flash (DAT1)
-//#define USE_EXT_EEPROM
+#define DEVICE_UART_CNT		1 // Not used
 
 // PHY init defines for WIZwiki-W7500 board series
 #define __DEF_USED_MDIO__ 
@@ -65,9 +79,6 @@
 #define HW_TRIG_PORT				STATUS_TCPCONNECT_PORT
 #define HW_TRIG_PAD_AF				STATUS_TCPCONNECT_PAD_AF
 
-
-/* To be developed: DTR / DSR */
-
 // DTR / DSR - Handshaking signals, Shared with PHYLINK_PIN and TCPCONNECT_PIN (selectable)
 // > DTR - Data Terminal Ready, Direction: Output (= PHYLINK_PIN)
 // 		>> This signal pin asserted when the device could be possible to transmit the UART inputs
@@ -84,6 +95,33 @@
 #define DSR_PORT					STATUS_TCPCONNECT_PORT
 #define DSR_PAD_AF					STATUS_TCPCONNECT_PAD_AF
 
+// UART Interface Selector Pin (temporary pin)
+// [Pull-down] RS-232/TTL mode
+// [Pull-up  ] RS-422/485 mode
+// if does not use this pin, UART interface is fixed RS-232 / TTL mode
+#ifdef __USE_UART_IF_SELECTOR__
+	#define UART_IF_SEL_PIN			GPIO_Pin_6
+	#define UART_IF_SEL_PORT		GPIOC
+	#define UART_IF_SEL_PAD_AF		PAD_AF1 // Used 2nd Function, GPIO
+#endif
+
+// Configuration Storage Selector
+// Internal data flash (DAT0/DAT1) or External EEPROM (I2C bus interface via GPIO pins)
+#ifdef __USE_EXT_EEPROM__
+	#include "i2cHandler.h"
+	#define EEPROM_I2C_SCL_PIN		I2C_SCL_PIN
+	#define EEPROM_I2C_SCL_PORT		I2C_SCL_PORT
+	#define EEPROM_I2C_SDA_PIN		I2C_SDA_PIN
+	#define EEPROM_I2C_SDA_PORT		I2C_SDA_PORT
+	#define EEPROM_I2C_PAD_AF		I2C_PAD_AF // GPIO
+#endif
+
+#ifdef __USE_BOOT_ENTRY__
+	#define BOOT_ENTRY_PIN			GPIO_Pin_14
+	#define BOOT_ENTRY_PORT			GPIOC
+	#define BOOT_ENTRY_PAD_AF		PAD_AF1
+#endif
+
 // Expansion GPIOs (4-Pins, GPIO A / B / C / D)
 //#define MAX_USER_IOn    16
 #define USER_IOn       4
@@ -97,26 +135,26 @@
 
 #define USER_IO_NO_ADC				0xff
 
-/*
-// USER IO pins for WIZ750SR, 
+
+// USER IO pins for WIZ750SR / WIZwiki-W7500ECO
 #define USER_IO_A_PIN				GPIO_Pin_13 // ECO: P28, AIN2
 #define USER_IO_A_PORT				GPIOC
-#define USER_IO_A_ADC_CH			ADC_CH2;
+#define USER_IO_A_ADC_CH			ADC_CH2
 
 #define USER_IO_B_PIN				GPIO_Pin_12 // ECO: P27, AIN3
 #define USER_IO_B_PORT				GPIOC
-#define USER_IO_B_ADC_CH			ADC_CH3;
+#define USER_IO_B_ADC_CH			ADC_CH3
 
 #define USER_IO_C_PIN				GPIO_Pin_9 // ECO: P26, AIN6
 #define USER_IO_C_PORT				GPIOC
-#define USER_IO_C_ADC_CH			ADC_CH6;
+#define USER_IO_C_ADC_CH			ADC_CH6
 
 #define USER_IO_D_PIN				GPIO_Pin_8 // ECO: P25, AIN7
 #define USER_IO_D_PORT				GPIOC
-#define USER_IO_D_ADC_CH			ADC_CH7;
-*/
+#define USER_IO_D_ADC_CH			ADC_CH7
 
-// Pins for Test (sample board)
+/*
+// Pins for Sample board
 #define USER_IO_A_PIN				GPIO_Pin_5
 #define USER_IO_A_PORT				GPIOA
 #define USER_IO_A_ADC_CH			USER_IO_NO_ADC
@@ -132,6 +170,7 @@
 #define USER_IO_D_PIN				GPIO_Pin_8
 #define USER_IO_D_PORT				GPIOA
 #define USER_IO_D_ADC_CH			USER_IO_NO_ADC
+*/
 
 // Status LEDs define
 #if (DEVICE_BOARD_NAME == WIZ750SR)
@@ -215,12 +254,21 @@
 	extern uint8_t flag_hw_trig_enable;
 	
 	void W7500x_Board_Init(void);
+	void Supervisory_IC_Init(void);
 	
 	void init_hw_trig_pin(void);
 	uint8_t get_hw_trig_pin(void);
 	
 	void init_phylink_in_pin(void);
 	uint8_t get_phylink_in_pin(void);
+	
+	void init_uart_if_sel_pin(void);
+	uint8_t get_uart_if_sel_pin(void);
+	
+#ifdef __USE_BOOT_ENTRY__
+	void init_boot_entry_pin(void);
+	uint8_t get_boot_entry_pin(void);
+#endif
 	
 	void LED_Init(Led_TypeDef Led);
 	void LED_On(Led_TypeDef Led);
