@@ -60,7 +60,6 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
   - Altium Designer
 
 ### Technical Reference
-  - Schematic
   - WIZ750SR-W7500P
 <p align="center">
   <img width="90%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?cache=&media=products:wiz750sr:datasheet:wiz750sr_w7500p_sch_20160608.png" />
