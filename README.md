@@ -99,11 +99,31 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
 
 #### WIZ750SR
 
-<!-- WIZ750SR Board pic -->
+<!--WIZ750SR pic -->
+<p align="center">
+  <img width="70%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?media=products:wiz750sr:5k5a5211.jpg" />
+</p>
 
 ##### Features
  - MCU: W7500P chip
    - ARM Cortex-M0 Core, up to 48MHz, 128kB Flash / 16kB RAM
+   - PHY Included (IC+(IP101G))
+   - Internal 8Mhz RC Oscillator 
    - Hardwired TCP/IP Core, 32KB RAM for TCP/IP (Can be extended to system RAM)
    - Peripherals (GPIO, ADC, SWD, Timer/PWM, UART, SPI, I2C and Etc.)
-   - 10/100 Ethernet MAC and PHY
+   - 10/100 Ethernet MAC
+
+##### Callout
+<p align="center">
+  <img width="70%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?media=products:wiz750sr:datasheet:wiz750sr_all_pinout.png" />
+</p>
+
+##### Pinout
+<p align="center">
+  <img width="90%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?media=products:wiz750sr:datasheet:wiz750sr_all_pinout.png" />
+</p>
+
+##### Dimension
+<p align="center">
+  <img width="60%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?media=products:wiz750sr:datasheet:wiz750sr_dimension.png" />
+</p>
