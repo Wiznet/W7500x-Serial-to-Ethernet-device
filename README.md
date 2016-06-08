@@ -15,7 +15,6 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
    - Pin shared with DTR / DSR pins 
  - Expansion 4-GPIOs for users customization
 
-
 ## Software
 ### Development Environment
   - KEIL uVision5 IDE v5.10
@@ -56,11 +55,16 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
 
   
 ## Hardware
+
+### Development Environment
+  - Altium Designer
+
 ### Technical Reference
   - Schematic
   - WIZ750SR
-![](http://i.imgur.com/hpLCZaS.png)
+
   - Demension
+
 
 
 ## Development
