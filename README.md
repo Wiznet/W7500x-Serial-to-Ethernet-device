@@ -80,7 +80,7 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
 
 <!--WIZwiki-W7500ECO Board pic -->
 <p align="center">
-  <img width="70%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?cache=&media=products:wiz750sr:wiz750sr_main.png" />
+  <img width="70%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?cache=&media=products:wizwiki-w7500eco:wizwiki-w7500eco3dtop.png" />
 </p>
 
 ##### Features
@@ -108,7 +108,7 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
 
 <!--WIZ750SR pic -->
 <p align="center">
-  <img width="70%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?media=products:wiz750sr:5k5a5211.jpg" />
+  <img width="70%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?cache=&media=products:wiz750sr:wiz750sr_main.png" />
 </p>
 
 ##### Features
