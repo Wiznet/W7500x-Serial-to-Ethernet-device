@@ -132,7 +132,7 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
 
 ##### Pinout
 <p align="center">
-  <img width="90%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?media=products:wiz750sr:datasheet:wiz750sr_all_pinout.png" />
+  <img width="90%" src="http://wizwiki.net/wiki/lib/exe/fetch.php?cache=&media=products:wiz750sr:datasheet:wiz750sr_all_pinout_20160609.png" />
 </p>
 
 ##### Dimension
