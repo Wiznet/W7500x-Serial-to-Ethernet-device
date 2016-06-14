@@ -21,37 +21,48 @@ Serial to Ethernet gateway (referred to as S2E) module device development resour
 
 ### Firmware
 #### Firmware Composition
-
   - Memory map (128kB Code Flash)
-    - Boot: 0x00000000 ~ 0x00006FFF (28kB)
-    - App : 0x00007000 ~ 0x000137FF (50kB)
-    - App_bak : 0x00013800 ~ 0x00020000 (50kB)
+```
+    Boot: 0x00000000 ~ 0x00006FFF (28kB)
+    App : 0x00007000 ~ 0x000137FF (50kB)
+    App_bak : 0x00013800 ~ 0x00020000 (50kB)
+```
 
   - Support functions in each area
-    - Boot: Production (MAC) / Search and settings via config-tool / Firmware update 
-    - App : Main application - S2E function / Search and settings via config-tool / Settings via serial AT command
-    - App_bak : Backup area for application binary 
+```
+    Boot: Production (MAC) / Search and settings via config-tool / Firmware update 
+    App : Main application - S2E function / Search and settings via config-tool / Settings via serial AT command
+    App_bak : Backup area for application binary 
+```
 
 #### Path
   - KEIL uVision5 project file (.uvproj)
-    - Boot: W7500x-Serial-to-Ethernet-device/Firmware_Projects_uVision5/Projects/S2E_Boot/ 
-    - App : W7500x-Serial-to-Ethernet-device/Firmware_Projects_uVision5/Projects/S2E_App/
-    
+```
+    Boot: W7500x-Serial-to-Ethernet-device/Firmware_Projects_uVision5/Projects/S2E_Boot/ 
+    App : W7500x-Serial-to-Ethernet-device/Firmware_Projects_uVision5/Projects/S2E_App/
+```
+ 
   - Binary file (.bin)
-    - Boot: W7500x-Serial-to-Ethernet-device/Firmware_Projects_uVision5/Projects/S2E_Boot/bin/
-    - App : W7500x-Serial-to-Ethernet-device/Firmware_Projects_uVision5/Projects/S2E_App/bin/
-    - Production : W7500x-Serial-to-Ethernet-device/Firmware_Projects_uVision5/Projects/
-      - Production firmware = App + Boot
+```
+    Boot: W7500x-Serial-to-Ethernet-device/Firmware_Projects_uVision5/Projects/S2E_Boot/bin/
+    App : W7500x-Serial-to-Ethernet-device/Firmware_Projects_uVision5/Projects/S2E_App/bin/
+    Production : W7500x-Serial-to-Ethernet-device/Firmware_Projects_uVision5/Projects/
+      Production firmware = App + Boot
+```
 
 #### Firmware update method
   - Application firmware binary: Update using configuration tool only
-    - Available bin file for: W7500x_S2E_App.bin
-    - Download: [WIZ107SR /WIZ108SR Config Tool for Windows](http://www.wiznet.co.kr/wp-content/uploads/wiznethome/S2E%20Module/WIZ107_108SR/Utility/WIZ107_108_config_tool.zip)
+```
+    Available bin file for: W7500x_S2E_App.bin
+    Download: [WIZ107SR /WIZ108SR Config Tool for Windows](http://www.wiznet.co.kr/wp-content/uploads/wiznethome/S2E%20Module/WIZ107_108SR/Utility/WIZ107_108_config_tool.zip)
+```
 
   - Boot and Production firmware binary: Update using ISP program
-    - Available bin file for: W7500x_S2E_Boot.bin / W7500x_S2E_Production.bin
-    - Guide Docs: [How to write the firmware into WIZwiki-W7500ECO](http://wizwiki.net/wiki/doku.php?id=products:wizwiki_w7500eco:start_getting_started:write_firmware) 
-    - Download: [W7500 ISP Program for Windows](http://wizwiki.net/wiki/lib/exe/fetch.php?media=products:wizwiki_w7500:w7500_isp_20150820_.zip)
+```
+    Available bin file for: W7500x_S2E_Boot.bin / W7500x_S2E_Production.bin
+    Guide Docs: [How to write the firmware into WIZwiki-W7500ECO](http://wizwiki.net/wiki/doku.php?id=products:wizwiki_w7500eco:start_getting_started:write_firmware) 
+    Download: [W7500 ISP Program for Windows](http://wizwiki.net/wiki/lib/exe/fetch.php?media=products:wizwiki_w7500:w7500_isp_20150820_.zip)
+```
 
   
 ## Hardware
