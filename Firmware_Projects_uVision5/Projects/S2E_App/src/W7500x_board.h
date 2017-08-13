@@ -22,7 +22,7 @@
 	#if (DEVICE_BOARD_NAME == WIZ750SR)
 		#define __W7500P__
 		#define __USE_UART_IF_SELECTOR__	// RS-232/TTL or RS-422/485 selector using UART IF selector pin
-		#define __USE_EXT_EEPROM__			// External EEPROM or Internal Data flash (DAT0/1)
+		//#define __USE_EXT_EEPROM__			// External EEPROM or Internal Data flash (DAT0/1)
 		#define __USE_BOOT_ENTRY__			// Application boot mode entry pin activated
 		#define __USE_APPBACKUP_AREA__	// If this option activated, Application firmware area is consists of App (50kB) and App backup (50kB). If not, user's application can be 100kB size. (Does not use the backup area)
 		#define DEVICE_CLOCK_SELECT	         CLOCK_SOURCE_EXTERNAL
@@ -33,7 +33,7 @@
 		//#define __USE_UART_IF_SELECTOR__
 		//#define __USE_EXT_EEPROM__
 		#define __USE_APPBACKUP_AREA__
-		#define DEVICE_CLOCK_SELECT	         CLOCK_SOURCE_EXTERNAL
+		#define DEVICE_CLOCK_SELECT	         CLOCK_SOURCE_INTERNAL // CLOCK_SOURCE_EXTERNAL
 		#define DEVICE_PLL_SOURCE_CLOCK      PLL_SOURCE_8MHz
 		#define DEVICE_TARGET_SYSTEM_CLOCK   SYSTEM_CLOCK_48MHz
 		#define DEVICE_ID_DEFAULT            "W7500-S2E" // Device name: WIZwiki_W7500 or WIZwiki_W7500ECO Board
